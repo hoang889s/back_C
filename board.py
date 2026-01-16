@@ -52,6 +52,87 @@ class Board:
         # đổi lượt đi giữa quân trắng và quân đen sử dụng toán tử 3 ngôi
         self.turn = BLACK if self.turn == WHITE else WHITE
     # Việc tiếp theo cần làm tình ra cách sinh nước đi hop le :) generate_pseudo_move
+    # Hàm sinh nước đi hợp lệ cho quân tốt Pawn(Tốt) hàm gồm self chỉ số hàng c(column) và chỉ số hàng r(row)
+    # Mục đích của hàm sẽ là đưa nước đi phù cho quân trắng tiến ăn
+    def generate_pawn_moves(self,r,c):
+        # khởi tạo mảng các nước di chuyển cua quân tốt giá trị rỗng
+        moves = []
+        # lấy vị trí hiện tại cảu quân cờ (ở đây có thể là quân Tốt)
+        piece = self.board[r][c]
+        # Kiểm tra có phải quân tốt trắng không
+        if piece == 'P':
+            # Đi thang 1 ô theo luật cờ vua nếu chỉ số hàng r >= 0 và vị trị của bàn cờ hieenj tại là dấu chấm thì nó tiến len 1 ô có the di hai ô nếu muốn
+            if r-1>=0 and self.board[r-1][c]==EMPTY:
+                # thêm vào mảng di chuyển move của quân này quân trắng sẽ giảm 1
+                moves.append((r,c,r-1,c))
+                # di chuyển 2 ô nếu là hàng đầu kiểm tra nếu r==6 và vị trị hiện tại của quân cờ hàng thứ 2 mang dấu chấm
+                if r==6 and self.board[r-2][c]==EMPTY:
+                    moves.append((r,c,r-2,c))
+            # Ăn Chéo quân nếu hợp lệ điều kiện kiểm tra sẽ là c-1 và r-1 >=0 trường hợp ben trái
+            if r-1>=0 and c-1>=0:
+                # neu là quân đen thì đươc ăn
+                if self.is_black(self.board[r-1][c-1]):
+                    moves.append((r,c,r-1,c-1))
+            # Ăn chéo quân trường hợp bên phải
+            if r-1>=0 and c+1<8:
+                # kiểm nếu là quân đen ăn
+                if self.is_black(self.board[r-1][c+1]):
+                    moves.append((r,c,r-1,c+1))
+        # trường hợp nó là quân đen tương tự với quân trắng nhưng đảo ngược lại
+        elif piece== 'p':
+            # đi thẳng 1 ô
+            if r+1<8 and self.board[r+1][c]==EMPTY:
+                moves.append((r,c,r+1,c))
+                if r==1 and self.board[r+2][c]==EMPTY:
+                    moves.append((r,c,r+2,c))
+            if r+1<8 and c-1>=0:
+                if self.is_white(self.board[r+1][c-1]):
+                    moves.append((r,c,r+1,c-1))
+            if r+1<8 and c+1<8:
+                if self.is_white(self.board[r+1][c+1]):
+                    moves.append((r,c,r+1,c+1))
+        return moves
+    # tiếp theo hàm sinh nước đi cho quân mã
+    def generate_knight_moves(self,r,c):
+        # khoi tao mảng di chuyển của quan mã
+        moves =[]
+        # lấy vị trí hiện tại của quân cờ
+        piece = self.board[r][c]
+        # kiểm tra có phải quân mã không nếu không thì không làm gì hết
+        if piece not in ('N','n'):
+            return moves
+        # xác định màu quân mã vì sở hưu logic ngắn gọn hơn quân tốt thì quân mã khá giông nhau 8 nước đi không bị chặn  và nhảy
+        is_white_knight = piece == "N"
+        # 8 hướng đi của quân mã
+        directions = [
+            (-2, -1), (-2, 1),
+            (-1, -2), (-1, 2),
+            (1, -2), (1, 2),
+            (2, -1), (2, 1)
+        ]
+        # dùng vòng lặp để thay thế 8 cái if cho một quân mã bằng cách duyệt dr và dc đó các chỉ số của quân mã của 8 hướng đi nc và nr và nước đi mới của quân mã sau khi cộng lại các cột va hàng mới
+        for dr,dc in directions:
+            nr = r + dr
+            nc = c + dc
+            # kiểm tra không ra ngoài bàn cờ
+            if 0<=nr<8 and 0 <=nc<8:
+                target=self.board[nr][nc]
+                # ô trống đi được
+                if target == EMPTY:
+                    moves.append((r,c,nr,nc))
+                # ăn quân khác màu
+                elif is_white_knight and self.is_black(target):
+                    moves.append((r,c,nr,nc))
+                elif not is_white_knight and self.is_white(target):
+                    moves.append((r,c,nr,nc))
+        return moves
+
+
+
+
+
+
+
 
 
 
