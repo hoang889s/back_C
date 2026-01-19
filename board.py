@@ -281,10 +281,70 @@ class Board:
                 elif not is_white_king and self.is_white(target):
                     moves.append((r,c,nr,nc))
         return moves
-
-
-
-
+    # xây dựng phần chiếu tương
+    # hàm tìm quân vua trên bàn cờ truyền màu của quân cờ ví dụ như trắng hoặc đen
+    def find_king(self,color):
+        # gán biến bằng chữ in hoa và in thường tượng trưng cho quân đen và quân trắng
+        king = 'K' if color== WHITE else 'k'
+        #duyệt hai vòng lặp trong mảng tương ứng với mảng hai chiều nhằm mục dich tìm hàng và cột
+        for r in range(8):
+            for c in range(8):
+                if self.board[r][c]==king:
+                    return r,c
+        return None
+    # hàm gọi luật đi từ quân tốt xe tượng hậu mã vua
+    def generate_piece_moves(self,r,c):
+        # lây vị trí hiện tại quân cờ
+        piece = self.board[r][c]
+        # nếu thuộc quân tốt trắng đen thì gọi luat di chuyển tốt
+        if piece in ('P','p'):
+            return self.generate_pawn_moves(r,c)
+        # nếu thuộc quân mã thì gọi luật của nó
+        if piece in ('N','N'):
+            return self.generate_knight_moves(r,c)
+        # nếu là quân xe thì gọi luật của nó
+        if piece in ('R','r'):
+            return self.generate_rook_moves(r,c)
+        # nếu là quân hậu thì gọi luật của nó
+        if piece in ('Q','q'):
+            return self.generate_queen_moves(r,c)
+        # nếu là quân tượng thì gọi luật của nó
+        if piece in ('B','b'):
+            return self.generate_bishop_moves(r,c)
+        # nếu là quân vua thì gọi luật của nó
+        if piece in ('K','k'):
+            return self.generate_king_moves(r,c)
+        return []
+    # Liệt kê tất cả các nước đi của quân trắng hoặc đen
+    def generate_all_pseudo_moves(self,color):
+        # khởi tạo một mảng chứa tất cả các nước đi của bên trăng hoặc đen
+        moves = []
+        # duyệt hai vòng lặp tượng trưng với cột và hàng trên bàn cờ
+        for r in range(8):
+            for c in range(8):
+                # vị trí hiện tại của quân cờ là gì và đang ở đâu
+                piece = self.board[r][c]
+                # nếu la dấu chấm thì bỏ qua vì không sinh được nuoc đi
+                if piece == EMPTY:
+                    continue
+                #neu thuộc tập hợp quân trăng và quan co hiên tai là trắng thì gọi luật phù hợp
+                if color==WHITE and self.is_white(piece):
+                    # cộng hết tất cả nước đi lưu vào mảng
+                    moves += self.generate_piece_moves(r,c)
+                elif color == BLACK and self.is_black(piece):
+                    moves += self.generate_piece_moves(r,c)
+        return moves
+    # hàm kiểm tra chiếu tướng
+    def is_in_check(self,color):
+        # tìm quân vua
+        king_pos = self.find_king(color)
+        # kiem tra quan minh va dối thủ
+        opponent = BLACK if color == WHITE else WHITE
+        for move in self.generate_all_pseudo_moves(opponent):
+            _, _, tr,tc = move
+            if(tr,tc) == king_pos:
+                return True
+        return False
 
 
 
