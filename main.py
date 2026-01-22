@@ -1,5 +1,6 @@
 # nơi này sẽ chạy mọi thứ
 from board import Board
+from constants import WHITE,BLACK
 if __name__ == "__main__":
     game = Board()
     game.print_board()
@@ -37,10 +38,12 @@ if __name__ == "__main__":
     if queen_move:
         game.make_move(queen_move[0])
     game.print_board()
-    king_move = game.generate_king_moves(7, 4)
+    king_move = game.generate_king_moves(0, 0)
     print(king_move)
     if king_move:
         game.make_move(king_move[0])
     game.print_board()
-
+# kiểm tra chiếu
+    print("White in check?", game.is_in_check(WHITE))
+    print("Black in check?", game.is_in_check(BLACK))
 
