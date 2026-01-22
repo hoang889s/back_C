@@ -1,8 +1,8 @@
 # khu vực bàn cờ
-from constants import WHITE,BLACK,EMPTY
+from constants import WHITE, BLACK, EMPTY
 # định nghĩa lớp bàn cờ
 class Board:
-    #self.board = [
+    # self.board = [
     #    ['.', '.', '.', '.', '.', '.', '.', '.'],
     #    ['.', '.', '.', '.', '.', '.', '.', '.'],
     #    ['.', '.', '.', '.', '.', '.', '.', '.'],
@@ -11,26 +11,26 @@ class Board:
     #    ['.', '.', '.', '.', '.', '.', '.', '.'],
     #    ['.', '.', '.', '.', '.', '.', '.', '.'],
     #    ['.', '.', '.', '.', '.', '.', '.', '.'],
-    #]
+    # ]
     def __init__(self):
         # định nghĩa list of list(có thể gọi là một mảng hai chiều) bàn cờ
-        self.board =[
-            #['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-            #['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-            #['.', '.', '.', '.', '.', '.', '.', '.'],
-            #['.', '.', '.', '.', '.', '.', '.', '.'],
-            #['.', '.', '.', '.', '.', '.', '.', '.'],
-            #['.', '.', '.', '.', '.', '.', '.', '.'],
-            #['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-            #['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
-             ['.', '.', '.', '.', 'r', '.', '.', '.'],
-             ['.', '.', '.', '.', '.', '.', '.', '.'],
-             ['.', '.', '.', '.', '.', '.', '.', '.'],
-             ['.', '.', '.', '.', '.', '.', '.', '.'],
-             ['.', '.', '.', '.', '.', '.', '.', '.'],
-             ['.', '.', '.', '.', '.', '.', '.', '.'],
-             ['.', '.', '.', '.', '.', '.', '.', '.'],
-             ['.', '.', '.', '.', 'K', '.', '.', '.'],
+        self.board = [
+            # ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+            # ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+            # ['.', '.', '.', '.', '.', '.', '.', '.'],
+            # ['.', '.', '.', '.', '.', '.', '.', '.'],
+            # ['.', '.', '.', '.', '.', '.', '.', '.'],
+            # ['.', '.', '.', '.', '.', '.', '.', '.'],
+            # ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+            # ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+            ['.', '.', '.', '.', 'r', '.', '.', '.'],
+            ['.', '.', '.', '.', '.', '.', '.', '.'],
+            ['.', '.', '.', '.', '.', '.', '.', '.'],
+            ['.', '.', '.', '.', '.', '.', '.', '.'],
+            ['.', '.', '.', '.', '.', '.', '.', '.'],
+            ['.', '.', '.', '.', '.', '.', '.', '.'],
+            ['.', '.', '.', '.', '.', '.', '.', '.'],
+            ['.', '.', '.', '.', 'K', '.', '.', '.'],
 
         ]
         # định nghĩa lượt quân trắng đi trước
@@ -38,7 +38,7 @@ class Board:
         # định nghĩa lịch sử các nước đi là một list rỗng
         self.move_history = []
     # hàm hiện thị ra bàn cờ
-    def print_board(self):
+    def print_board(self) :
         # in ra các chữ cái từ a -> h trong bàn cờ vua quốc tế
         print(" a b c d e f g h")
         # duyệt mảng của self.board để in ra các dữ lieu ở trong đó dùng enumrate đê co thể lấy index vì nó trả về [index,value] mục đích giúp row dữ index một cách tiện lợi
@@ -55,17 +55,27 @@ class Board:
         return piece.isupper()
     # hàm kiểm tra là quân đen sử dụng islower để kiểm tra chữ thường
     def is_black(self, piece):
-        return  piece.islower()
+        return piece.islower()
     # thực hiện các nước đi để thử lưu ý chưa có luật củ thể ở hàm này chỉ giả lập gồm 4 chỉ số chính fr,fc,tr,tc là first row (bắt đầu ở hàng) , first column (cột bắt đầu), to row (đên cột), to column(đến cột)
     def make_move(self, move):
         # một kiêu tuple ví dụ move là (6,4,4,4) thì nó sẽ gán lần lượt các biến fr=6, fc=4,tr=4,tc=4 một kiểu giải nén
-        fr,fc,tr,tc = move
+        if len(move) == 5:
+            fr, fc, tr, tc, promotion = move
+        else:
+            fr, fc, tr, tc = move
+            promotion = None
         # lấy vị trị hiện tại của quân cờ tương ứng với nơi bắt đâu luôn ví dụ piece[0][0] quân xe
         piece = self.board[fr][fc]
         # sau khi thực hiện nước đi ví dụ đi quân tốt thì nó sẽ thực hiện xóa nước cũ thì nó tương ứng là đổi thành dấu chấm
         self.board[fr][fc] = EMPTY
-        # sau khi đi thuc hien cập nhật nước cờ mới tr,tc để hiện thị sau khi đi
-        self.board[tr][tc] = piece
+        # them phong quan o day sau khi đi thuc hien cập nhật nước cờ mới tr,tc để hiện thị sau khi đi
+        if promotion:
+            if self.is_white(piece):
+                self.board[tr][tc] = promotion.upper()
+            else:
+                self.board[tr][tc] = promotion.lower()
+        else:
+            self.board[tr][tc] = piece
         # lưu lịch sử nước cờ vừa đi bằng phương thưc append mảng thêm vào
         self.move_history.append(move)
         # đổi lượt đi giữa quân trắng và quân đen sử dụng toán tử 3 ngôi
@@ -81,35 +91,56 @@ class Board:
         # Kiểm tra có phải quân tốt trắng không
         if piece == 'P':
             # Đi thang 1 ô theo luật cờ vua nếu chỉ số hàng r >= 0 và vị trị của bàn cờ hieenj tại là dấu chấm thì nó tiến len 1 ô có the di hai ô nếu muốn
-            if r-1>=0 and self.board[r-1][c]==EMPTY:
-                # thêm vào mảng di chuyển move của quân này quân trắng sẽ giảm 1
-                moves.append((r,c,r-1,c))
+            if r-1 >= 0 and self.board[r-1][c] == EMPTY:
+                # thêm vào mảng di chuyển move của quân này quân trắng sẽ giảm 1 va co the phong quan
+                if r-1 == 0:
+                    for p in ['Q', 'R', 'B', 'N']:
+                        moves.append((r, c, r-1, c, p))
+                else:
+                    moves.append((r, c, r - 1, c))
                 # di chuyển 2 ô nếu là hàng đầu kiểm tra nếu r==6 và vị trị hiện tại của quân cờ hàng thứ 2 mang dấu chấm
-                if r==6 and self.board[r-2][c]==EMPTY:
-                    moves.append((r,c,r-2,c))
+                if r == 6 and self.board[r-2][c] == EMPTY:
+                    moves.append((r, c, r-2, c))
             # Ăn Chéo quân nếu hợp lệ điều kiện kiểm tra sẽ là c-1 và r-1 >=0 trường hợp ben trái
-            if r-1>=0 and c-1>=0:
-                # neu là quân đen thì đươc ăn
-                if self.is_black(self.board[r-1][c-1]):
-                    moves.append((r,c,r-1,c-1))
+            if r-1 >= 0 and c-1 >= 0 and self.is_black(self.board[r-1][c-1]):
+                if r-1 == 0:
+                    for p in ['Q', 'R', 'B', 'N']:
+                        moves.append((r, c, r - 1, c - 1, p))
+                else:
+                    moves.append((r, c, r - 1, c - 1))
             # Ăn chéo quân trường hợp bên phải
-            if r-1>=0 and c+1<8:
-                # kiểm nếu là quân đen ăn
-                if self.is_black(self.board[r-1][c+1]):
-                    moves.append((r,c,r-1,c+1))
+            if r-1 >= 0 and c+1 < 8 and self.is_black(self.board[r-1][c+1]):
+                if r-1 == 0:
+                    for p in ['Q', 'R', 'B', 'N']:
+                        moves.append((r, c, r - 1, c + 1, p))
+                else:
+                    moves.append((r, c, r - 1, c + 1))
         # trường hợp nó là quân đen tương tự với quân trắng nhưng đảo ngược lại
-        elif piece== 'p':
+        elif piece == 'p':
             # đi thẳng 1 ô
-            if r+1<8 and self.board[r+1][c]==EMPTY:
-                moves.append((r,c,r+1,c))
-                if r==1 and self.board[r+2][c]==EMPTY:
-                    moves.append((r,c,r+2,c))
-            if r+1<8 and c-1>=0:
-                if self.is_white(self.board[r+1][c-1]):
-                    moves.append((r,c,r+1,c-1))
-            if r+1<8 and c+1<8:
-                if self.is_white(self.board[r+1][c+1]):
-                    moves.append((r,c,r+1,c+1))
+            if r+1 < 8 and self.board[r+1][c] == EMPTY:
+                # neu len hang thi phong quan
+                if r+1 == 7:
+                    # duyet lap cac quan muon phong
+                    for p in ['Q', 'R', 'B', 'N']:
+                        moves.append((r, c, r+1, c, p))
+                else:
+                    moves.append((r, c, r + 1, c))
+                # di len hai o neu muon
+                if r == 1 and self.board[r+2][c] == EMPTY:
+                    moves.append((r, c, r+2, c))
+            if r+1 < 8 and c-1 >= 0 and self.is_white(self.board[r+1][c-1]):
+                if r+1 == 7:
+                    for p in ['Q', 'R', 'B', 'N']:
+                        moves.append((r, c, r + 1, c - 1, p))
+                else:
+                    moves.append((r, c, r + 1, c - 1))
+            if r+1 < 8 and c+1 < 8 and self.is_white(self.board[r+1][c+1]):
+                if r+1 == 7:
+                    for p in ['Q', 'R', 'B', 'N']:
+                        moves.append((r, c, r + 1, c + 1, p))
+                else:
+                    moves.append((r, c, r + 1, c + 1))
         return moves
     # tiếp theo hàm sinh nước đi cho quân mã
     def generate_knight_moves(self,r,c):
@@ -130,96 +161,96 @@ class Board:
             (2, -1), (2, 1)
         ]
         # dùng vòng lặp để thay thế 8 cái if cho một quân mã bằng cách duyệt dr và dc đó các chỉ số của quân mã của 8 hướng đi nc và nr và nước đi mới của quân mã sau khi cộng lại các cột va hàng mới
-        for dr,dc in directions:
+        for dr, dc in directions:
             nr = r + dr
             nc = c + dc
             # kiểm tra không ra ngoài bàn cờ
-            if 0<=nr<8 and 0 <=nc<8:
-                target=self.board[nr][nc]
+            if 0 <= nr < 8 and 0 <= nc < 8:
+                target = self.board[nr][nc]
                 # ô trống đi được
                 if target == EMPTY:
                     moves.append((r,c,nr,nc))
                 # ăn quân khác màu
                 elif is_white_knight and self.is_black(target):
-                    moves.append((r,c,nr,nc))
+                    moves.append((r, c, nr, nc))
                 elif not is_white_knight and self.is_white(target):
-                    moves.append((r,c,nr,nc))
+                    moves.append((r, c, nr, nc))
         return moves
     # hàm sinh nước đi cho quân tượng
     def generate_bishop_moves(self,r,c):
         # khởi tạo các nước quân tượng có thể đi là hàm rỗng
-        moves =[]
+        moves = []
         # lấy vị trị hiện tại cua quân tượng
-        piece=self.board[r][c]
+        piece = self.board[r][c]
         # không phải quân tượng thì không làm gì hết
         if piece not in ('B','b'):
             return moves
-        #gán biến phân biệt là quân đen hay trang bây giờ đang là trăng sẽ trả về true
-        is_white_bishop =piece=="B"
+        # gán biến phân biệt là quân đen hay trang bây giờ đang là trăng sẽ trả về true
+        is_white_bishop = piece == "B"
         # 4 hướng đi của quân tượng
         directions = [
-            (-1,-1),# trái lên
-            (-1,1),# lên phải
-            (1,-1),# trái xuống
-            (1,1)# phải xuống
+            (-1, -1),
+            (-1, 1),
+            (1, -1),
+            (1, 1)
         ]
         # duyệt từng hướng giong luật quân mã nhưng khác là duyệt while thai vì if
-        for dr,dc in directions:
+        for dr, dc in directions:
             nr = r+dr
             nc = c+dc
             # duyet nằm trong vi đi từng nước một
-            while 0<=nr<8 and 0<=nc<8:
+            while 0 <= nr < 8 and 0 <= nc < 8:
                 target = self.board[nr][nc]
                 # nếu là dấu chấm trên ma trận thì được đi
                 if target == EMPTY:
                     moves.append((r,c,nr,nc))
                 # gặp quân đich ăn -> dừng
                 elif is_white_bishop and self.is_black(target):
-                    moves.append((r,c,nr,nc))
+                    moves.append((r, c, nr, nc))
                     break
-                elif not is_white_bishop and  self.is_white(target):
-                    moves.append((r,c,nr,nc))
+                elif not is_white_bishop and self.is_white(target):
+                    moves.append((r, c, nr, nc))
                     break
                 # gặp quân cùng màu dừng
-                else :
+                else:
                     break
                 # thực hiện cộng để đi xa hơn + lặp lại đến diều kiện dừng
                 nr += dr
                 nc += dc
-        return  moves
+        return moves
     def generate_rook_moves(self,r,c):
         # khởi tạo mảng di chuyển quân xe hiện tại là rỗng
-        moves =[]
+        moves = []
         # lấy vị trí hiện tại của quân xe
         piece = self.board[r][c]
         # không phải quân xe thì không làm gì
         if piece not in ('R','r'):
             return moves
         # gán biến phân biệt xe trắng và xe đen
-        is_white_rook=piece=="R"
+        is_white_rook = piece == "R"
         # 4 hướng đi của quân xe
-        directions =[
-            (-1,0),#lên
-            (1,0),#xuống
-            (0,-1),# trái
-            (0,1)# phải
+        directions = [
+            (-1, 0),
+            (1, 0),
+            (0, -1),
+            (0, 1)
         ]
         # duyệt các nước đi
-        for dr,dc in directions:
+        for dr, dc in directions:
             nr = r + dr
-            nc= c +dc
+            nc = c + dc
             # đi tung hướng cho đến khi bị chặn
-            while 0<=nr<8 and 0<=nc<8:
+            while 0 <= nr < 8 and 0 <= nc < 8:
                 target = self.board[nr][nc]
-                #kiểm tra có phải rỗng nếu không rong thì được đi
-                if target==EMPTY:
-                    moves.append((r,c,nr,nc))
+                # kiểm tra có phải rỗng nếu không rong thì được đi
+                if target == EMPTY:
+                    moves.append((r, c, nr, nc))
                 # kiểm tra ăn quân va dung lại
                 elif is_white_rook and self.is_black(target):
-                    moves.append((r,c,nr,nc))
+                    moves.append((r, c, nr, nc))
                     break
                 elif not is_white_rook and self.is_white(target):
-                    moves.append((r,c,nr,nc))
+                    moves.append((r, c, nr, nc))
                     break
                 # ngược nếu trùng màu thì dừng lại
                 else:
@@ -228,37 +259,37 @@ class Board:
                 nc += dc
         return moves
     # sinh nuoc di cho quan hau
-    def generate_queen_moves(self,r,c):
+    def generate_queen_moves(self, r, c):
         # khởi tạo moves bằng rỗng
         moves = []
         # lấy vị trí của quân cờ hiện tại
-        piece=self.board[r][c]
+        piece = self.board[r][c]
         # kiểm tra có phải quân hậu nếu không phải thì không làm gì hêt
-        if piece not in ('Q','q'):
+        if piece not in ('Q', 'q'):
             return moves
         # gán biến để phân biết quân đen và trắng
-        is_white_queen=piece == "Q"
+        is_white_queen = piece == "Q"
         # hướng đi của quân hậu là kết hợp của quân tượng(bishop) quân xe(rook)
         directions = [
-            (-1,0),(1,0),(0,1),(0,-1),
-            (-1,-1),(-1,1),(1,-1),(1,1)
+            (-1, 0), (1, 0), (0, 1), (0, -1),
+            (-1, -1), (-1, 1), (1, -1), (1, 1)
         ]
         # duyệt các quân cờ có nước đi phù hợp
-        for dr,dc in directions:
+        for dr, dc in directions:
             nr = r+dr
             nc = c+dc
             # duyệt các nước đi đúng hướng cho đến khi bị chan nhu an quân di chuyen dưng rồi lặp lại
-            while 0<=nr<8 and 0<=nc<8:
+            while 0 <= nr < 8 and 0 <= nc < 8:
                 target = self.board[nr][nc]
                 # kiểm tra có rỗng không nếu rỗng được di chuyen
-                if target==EMPTY:
-                    moves.append((r,c,nr,nc))
+                if target == EMPTY:
+                    moves.append((r, c, nr, nc))
                 # kiểm tra ăn quân và dừng lai
                 elif is_white_queen and self.is_black(target):
                     moves.append((r,c,nr,nc))
                     break
                 elif not is_white_queen and self.is_white(target):
-                    moves.append((r,c,nr,nc))
+                    moves.append((r, c, nr, nc))
                     break
                 # nếu quân cùng màu thì dừng lại
                 else:
@@ -267,71 +298,71 @@ class Board:
                 nc += dc
         return moves
     # hàm di chuyển của quân vua
-    def generate_king_moves(self,r,c):
+    def generate_king_moves(self, r, c):
         # khởi tạo một mảng di chuyển quân rỗng
         moves = []
         # lấy ví trí hiện tại của quân
         piece = self.board[r][c]
         # kiểm tra nó có phải quân vua không
-        if piece not in ('K','k'):
+        if piece not in ('K', 'k'):
             return moves
         # gán biến phân biệt quân đen trắng
-        is_white_king= piece == 'K'
+        is_white_king = piece == 'K'
         # 8 hướng đi của quân vua
         directions = [
-            (-1,-1),(1,0),(-1,1),
-            (0,-1),(0,1),
-            (1,-1),(1,0),(1,1)
+            (-1, -1), (1, 0), (-1, 1),
+            (0, -1), (0, 1),
+            (1, -1), (1, 0), (1, 1)
         ]
         # duyệt quân các hướng đi hợp lý của quân vua
-        for dr,dc in directions:
+        for dr, dc in directions:
             nr = r + dr
             nc = c + dc
             # kiểm tra ở trong phạm vi
-            if  0<=nr<8 and 0<=nc<8:
+            if 0 <= nr < 8 and 0 <= nc < 8:
                 target = self.board[nr][nc]
                 # kiểm tra di chuyển hợp lệ
                 if target == EMPTY:
-                    moves.append((r,c,nr,nc))
+                    moves.append((r, c, nr, nc))
                 # kiểm tra ăn quân
                 elif is_white_king and self.is_black(target):
-                    moves.append((r,c,nc,nr))
+                    moves.append((r, c, nr, nc))
                 # ngược lại
                 elif not is_white_king and self.is_white(target):
-                    moves.append((r,c,nr,nc))
+                    moves.append((r, c, nr, nc))
         return moves
     # xây dựng phần chiếu tương
     # hàm tìm quân vua trên bàn cờ truyền màu của quân cờ ví dụ như trắng hoặc đen
     def find_king(self,color):
         # gán biến bằng chữ in hoa và in thường tượng trưng cho quân đen và quân trắng
-        king = 'K' if color== WHITE else 'k'
-        #duyệt hai vòng lặp trong mảng tương ứng với mảng hai chiều nhằm mục dich tìm hàng và cột
+        king = 'K' if color == WHITE else 'k'
+        # duyệt hai vòng lặp trong mảng tương ứng với mảng hai chiều nhằm mục dich tìm hàng và cột
         for r in range(8):
             for c in range(8):
-                if self.board[r][c]==king:
-                    return r,c
+                if self.board[r][c] == king:
+                    return r, c
         return None
     # hàm gọi luật đi từ quân tốt xe tượng hậu mã vua
     def generate_piece_moves(self,r,c):
         # lây vị trí hiện tại quân cờ
         piece = self.board[r][c]
         # nếu thuộc quân tốt trắng đen thì gọi luat di chuyển tốt
-        if piece in ('P','p'):
+        if piece in ('P', 'p'):
             return self.generate_pawn_moves(r,c)
         # nếu thuộc quân mã thì gọi luật của nó
-        if piece in ('N','n'):
+        if piece in ('N', 'n'):
             return self.generate_knight_moves(r,c)
         # nếu là quân xe thì gọi luật của nó
-        if piece in ('R','r'):
+        if piece in ('R', 'r'):
             return self.generate_rook_moves(r,c)
         # nếu là quân hậu thì gọi luật của nó
-        if piece in ('Q','q'):
+        if piece in ('Q', 'q'):
             return self.generate_queen_moves(r,c)
         # nếu là quân tượng thì gọi luật của nó
-        if piece in ('B','b'):
+        if piece in ('B', 'b'):
             return self.generate_bishop_moves(r,c)
         # nếu là quân vua thì gọi luật của nó
-        if piece in ('K','k'):
+        if piece in ('K', 'k'):
             return self.generate_king_moves(r,c)
         return []
     # Liệt kê tất cả các nước đi của quân trắng hoặc đen
@@ -346,8 +377,8 @@ class Board:
                 # nếu la dấu chấm thì bỏ qua vì không sinh được nuoc đi
                 if piece == EMPTY:
                     continue
-                #neu thuộc tập hợp quân trăng và quan co hiên tai là trắng thì gọi luật phù hợp
-                if color==WHITE and self.is_white(piece):
+                # neu thuộc tập hợp quân trăng và quan co hiên tai là trắng thì gọi luật phù hợp
+                if color == WHITE and self.is_white(piece):
                     # cộng hết tất cả nước đi lưu vào mảng
                     moves += self.generate_piece_moves(r,c)
                 elif color == BLACK and self.is_black(piece):
@@ -360,10 +391,51 @@ class Board:
         # kiem tra quan minh va dối thủ
         opponent = BLACK if color == WHITE else WHITE
         for move in self.generate_all_pseudo_moves(opponent):
-            _, _, tr,tc = move
-            if(tr,tc) == king_pos:
+            tr, tc = move[2], move[3]
+            if (tr, tc) == king_pos:
                 return True
         return False
+    # lọc nước đi hợp lệ
+    # quan trọng vì nó Đi thử -> kiểm tra -> quay lại như cu
+    def undo_move(self):
+        move = self.move_history.pop()
+        # nếu là quan muốn phong
+        if len(move) == 5:
+            fr, fc, tr, tc, promotion = move
+            pawn = 'P' if promotion.isupper() else 'p'
+            self.board[tr][tc] = EMPTY
+            self.board[fr][fc] = pawn
+        # nước đi bình thuong
+        else:
+            fr, fc, tr, tc = move
+            piece = self.board[tr][tc]
+            self.board[tr][tc] = EMPTY
+            self.board[fr][fc] = piece
+        # đổi lượt
+        self.turn = BLACK if self.turn == WHITE else WHITE
+    # Sinh nước đi hơp lệ mục đích tìm ra quân chiếu và lọc các nuoc đi hợp lệ không bị chiếu
+    def generate_legal_moves(self,r,c):
+        # khởi tạo mảng các nước đi hợp lệ là rỗng
+        legal_moves = []
+        # lấy vị trí hiện tại của quân cờ
+        piece = self.board[r][c]
+        # gán màu để đảo chiều
+        color = WHITE if self.is_white(piece) else BLACK
+        # sinh ra toàn bộ nước đi hợp lệ
+        pseudo_moves = self.generate_piece_moves(r, c)
+        # duyệt các nước đi trong vòng lặp
+        for move in pseudo_moves:
+            # tạo ra các di chuyen hợp lệ
+            self.make_move(move)
+            # nêu không bị chiếu thì thêm vào mảng nước đi hợp lệ
+            if not self.is_in_check(color):
+                legal_moves.append(move)
+            # quay lại nước trước đó
+            self.undo_move()
+        return legal_moves
+
+
+
 
 
 
