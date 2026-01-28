@@ -1,49 +1,33 @@
 # nơi này sẽ chạy mọi thứ
 from board import Board
-from constants import WHITE,BLACK
+from constants import WHITE, BLACK, EMPTY
 if __name__ == "__main__":
     game = Board()
+    # reset bàn cờ về rỗng
+    # tương tự tạo ra hai vòng lặp
+    game.board = [[EMPTY for _ in range(8)] for _ in range(8)]
+    # đặt vua vào nếu không is_in_check kiểm tra không hợp thì sẽ lỗi
+    game.board[7][4] = 'K'
+    game.board[0][4] = '.'
+    # đặt một quân tốt để phong quân
+    game.board[1][4] = 'P'
+    # in bàn cờ
     game.print_board()
-    # đi thử
+    # bắt đầu phong quân
+    pawn_moves = game.generate_pawn_moves(1, 4)
+    print(" cac nươc di cua quan tot e7 :")
+    print(pawn_moves)
+    # test make move
+    move = pawn_moves[0]
+    game.make_move(move)
+    game.print_board()
+    # test undo move
+    game.undo_move()
+    game.print_board()
+    # test legal move
+    legal = game.generate_legal_moves(1, 4)
+    print("Legal promotion moves:")
+    print(legal)
 
-    # quân tôt đi thử
-    pawn_move = game.generate_pawn_moves(6,4)
-    print("cac nuoc di hop le cua e2:")
-    print(pawn_move)
-    if pawn_move:
-        game.make_move(pawn_move[1])
-    game.print_board()
-    knight_move = game.generate_knight_moves(7,6)
-    print(knight_move)
-    if knight_move:
-        game.make_move(knight_move[0])
-    game.print_board()
-    bishop_move = game.generate_bishop_moves(7,5)
-    print(bishop_move)
-    if bishop_move:
-        game.make_move(bishop_move[4])
-    game.print_board()
-    pawn_move = game.generate_pawn_moves(6, 7)
-    print(pawn_move)
-    if pawn_move:
-        game.make_move(pawn_move[1])
-    game.print_board()
-    rook_move = game.generate_rook_moves(7, 7)
-    print(rook_move)
-    if rook_move:
-        game.make_move(rook_move[1])
-    game.print_board()
-    queen_move = game.generate_queen_moves(7, 3)
-    print(queen_move)
-    if queen_move:
-        game.make_move(queen_move[0])
-    game.print_board()
-    king_move = game.generate_king_moves(0, 0)
-    print(king_move)
-    if king_move:
-        game.make_move(king_move[0])
-    game.print_board()
-# kiểm tra chiếu
-    print("White in check?", game.is_in_check(WHITE))
-    print("Black in check?", game.is_in_check(BLACK))
+
 
