@@ -35,6 +35,12 @@ class Board:
             ['.', '.', '.', '.', 'K', '.', '.', '.'],
 
         ]
+        # them trạng thái nhập thành của quân vua và xe rook, king
+        self.white_king_moved = False
+        self.black_king_moved = False
+        # kieu dictionnary
+        self.white_rook_moved = {'a': False, 'h': False}
+        self.black_rook_moved = {'a': False, 'h': False}
         # định nghĩa lượt quân trắng đi trước
         self.turn = WHITE
         # định nghĩa lịch sử các nước đi là một list rỗng
@@ -78,6 +84,17 @@ class Board:
             promotion = None
         # lấy vị trị hiện tại của quân cờ tương ứng với nơi bắt đâu luôn ví dụ piece[0][0] quân xe
         piece = self.board[fr][fc]
+        # cập nhật tranng thại của quân vua(king) khi nhập thành
+        if piece == 'K':
+            self.white_king_moved = True
+        elif piece == 'k':
+            self.black_king_moved = True
+        # cập nhật trạng thái của quân xe(rook) khi nhập thành
+        if piece == 'R':
+            if fc == 0:
+                self.white_rook_moved['a'] = True
+            elif fc == 7:
+                self.black_rook_moved['h'] = True
         # sau khi thực hiện nước đi ví dụ đi quân tốt thì nó sẽ
         # thực hiện xóa nước cũ thì nó tương ứng là đổi thành dấu chấm
         self.board[fr][fc] = EMPTY
@@ -353,6 +370,11 @@ class Board:
                 # ngược lại
                 elif not is_white_king and self.is_white(target):
                     moves.append((r, c, nr, nc))
+        # nhập thành
+        if piece == 'K':
+            moves.extend(self.generate_castling_moves_w(r, c))
+        elif piece == 'k':
+            moves.extend(self.generate_castling_moves_b(r, c))
         return moves
 
     # xây dựng phần chiếu tương
@@ -463,3 +485,61 @@ class Board:
             # quay lại nước trước đó
             self.undo_move()
         return legal_moves
+
+    # nhập thành
+    # kiểm tra nhập thành có bị chieu trươc khi nhập thành không
+    def is_square_attacked(self, r, c, by_color):
+        for move in self.generate_all_pseudo_moves(by_color):
+            # đây chính là hai phần tử row col target của quân địch
+            if move[2] == r and move[3] == c:
+                return True
+            return False
+
+    # hàm sinh nước đi cho nhập thành quân trắng
+    def generate_castling_moves_w(self, r, c):
+        moves = []
+        # quân cơ hiện tại
+        piece = self.board[r][c]
+        # kiểm tra nếu là quân trắng
+        if piece == 'K':
+            # nếu quân vua trắng đã đi rồi thì không làm gì cả
+            if self.white_king_moved:
+                return moves
+            opponent = BLACK
+            # nhập thành canh vua
+            if not self.white_rook_moved['h']:
+                if self.board[7][5] == EMPTY and self.board[7][6] == EMPTY:
+                    if not self.is_square_attacked(7, 4, opponent) and \
+                            not self.is_square_attacked(7, 5, opponent) and \
+                            not self.is_square_attacked(7, 6, opponent):
+                        moves.append((7, 4, 7, 6, 'castle'))
+            # nhâp thành cánh hậu
+            if not self.white_rook_moved['a']:
+                if self.board[7][1] == EMPTY and self.board[7][2] == EMPTY and self.board[7][3] == EMPTY:
+                    if not self.is_square_attacked(7, 4, opponent) and \
+                            not self.is_square_attacked(7, 3, opponent) and \
+                            not self.is_square_attacked(7, 2, opponent):
+                        moves.append((7, 4, 7, 2, 'castle'))
+        return moves
+
+    # dành cho quân đen
+    def generate_castling_moves_b(self, r, c):
+        moves = []
+        piece = self.board[r][c]
+        if piece == 'k':
+            if self.black_king_moved:
+                return moves
+            opponent = WHITE
+            if not self.black_rook_moved['h']:
+                if self.board[0][5] == EMPTY and self.board[0][6] == EMPTY:
+                    if not self.is_square_attacked(0, 4, opponent) and \
+                       not self.is_square_attacked(0, 5, opponent) and \
+                       not self.is_square_attacked(0, 6, opponent):
+                        moves.append((0, 4, 0, 6, 'castle'))
+                if not self.black_rook_moved['a']:
+                    if self.board[0][1] == EMPTY and self.board[0][2] == EMPTY and self.board[0][3]:
+                        if not self.is_square_attacked(0, 4, opponent) and \
+                           not self.is_square_attacked(0, 3, opponent) and \
+                           not self.is_square_attacked(0, 2, opponent):
+                            moves.append((0, 4, 0, 2, 'castle'))
+        return moves
