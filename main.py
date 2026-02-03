@@ -1,33 +1,87 @@
 # nơi này sẽ chạy mọi thứ
 from board import Board
 from constants import WHITE, BLACK, EMPTY
-if __name__ == "__main__":
+# nhap thanh cho quan trang
+def test_white_castling_kingside():
+    print(" nhâp thanh quân trang")
+    # khoi tao
     game = Board()
-    # reset bàn cờ về rỗng
-    # tương tự tạo ra hai vòng lặp
-    game.board = [[EMPTY for _ in range(8)] for _ in range(8)]
-    # đặt vua vào nếu không is_in_check kiểm tra không hợp thì sẽ lỗi
+    # tao một bàn cờ đi
+    game.board = [
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['R', '.', '.', '.', 'K', '.', '.', 'R'],
+    ]
+    game.white_king_moved = False
+    game.white_rook_moved['a'] = False
+    game.white_rook_moved['h'] = False
+    moves = game.generate_king_moves(7, 4)
+    print("nhap thanh quan trang")
+    assert (7, 4, 7, 6, 'castle') in moves
+    print("ok")
+    print(moves)
+# nhap thanh canh hau
+def test_white_castling_queenside():
+    print("nhap thanh canh hau")
+    game = Board()
+    game.board = [
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['R', '.', '.', '.', 'K', '.', '.', 'R'],
+    ]
+    game.white_king_moved = False
+    game.white_rook_moved['a'] = False
+    game.white_rook_moved['h'] = False
+    moves = game.generate_king_moves(7, 4)
+    print("nhap thanh canh hau")
+    assert (7, 4, 7, 2, 'castle') in moves
+    print("ok")
+    print(moves)
+# trương hợp không hợp lệ
+def test_white_castling_faild_king_move():
+    print("trương hop khi nhap thanh that bai vi da di quan")
+    game = Board()
     game.board[7][4] = 'K'
-    game.board[0][4] = '.'
-    # đặt một quân tốt để phong quân
-    game.board[1][4] = 'P'
-    # in bàn cờ
-    game.print_board()
-    # bắt đầu phong quân
-    pawn_moves = game.generate_pawn_moves(1, 4)
-    print(" cac nươc di cua quan tot e7 :")
-    print(pawn_moves)
-    # test make move
-    move = pawn_moves[0]
-    game.make_move(move)
-    game.print_board()
-    # test undo move
-    game.undo_move()
-    game.print_board()
-    # test legal move
-    legal = game.generate_legal_moves(1, 4)
-    print("Legal promotion moves:")
-    print(legal)
+    game.white_king_moved = True
+    moves = game.generate_king_moves(7, 4)
+    print("nuoc di cua quan vua",moves)
+    assert all(len(m) != 5 for m in moves)
+    print("ok")
+# trương hợp bị chiếu
+def test_white_castling_faild_in_check():
+    print(" nhap thanh khi quan vua bi chiếu")
+    game = Board()
+    # tạo bàn cờ có quân xe bị chiếu
+    game.board = [
+        ['.', '.', '.', '.', 'r', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['.', '.', '.', '.', '.', '.', '.', '.'],
+        ['R', '.', '.', '.', 'K', '.', '.', 'R'],
+    ]
+    moves = game.generate_king_moves(7, 4)
+    print(" cac nuoc di cua quan vua khi bi chiếu")
+    assert (7, 4, 7, 6, 'castle') not in moves
+    print("test thanh cong")
+if __name__ == "__main__":
+    test_white_castling_kingside()
+    test_white_castling_queenside()
+    test_white_castling_faild_king_move()
+    test_white_castling_faild_in_check()
+
 
 
 

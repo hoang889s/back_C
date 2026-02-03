@@ -493,7 +493,7 @@ class Board:
             # đây chính là hai phần tử row col target của quân địch
             if move[2] == r and move[3] == c:
                 return True
-            return False
+        return False
 
     # hàm sinh nước đi cho nhập thành quân trắng
     def generate_castling_moves_w(self, r, c):
@@ -537,7 +537,7 @@ class Board:
                        not self.is_square_attacked(0, 6, opponent):
                         moves.append((0, 4, 0, 6, 'castle'))
                 if not self.black_rook_moved['a']:
-                    if self.board[0][1] == EMPTY and self.board[0][2] == EMPTY and self.board[0][3]:
+                    if self.board[0][1] == EMPTY and self.board[0][2] == EMPTY and self.board[0][3] == EMPTY:
                         if not self.is_square_attacked(0, 4, opponent) and \
                            not self.is_square_attacked(0, 3, opponent) and \
                            not self.is_square_attacked(0, 2, opponent):
