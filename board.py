@@ -77,22 +77,52 @@ class Board:
     # first column (cột bắt đầu), to row (đên cột), to column(đến cột)
     def make_move(self, move):
         # một kiêu tuple ví dụ move là (6,4,4,4) thì nó sẽ gán lần lượt các biến fr=6, fc=4,tr=4,tc=4 một kiểu giải nén
+        # đay là một kiểu giải nén nước đi nó có thể phong quân hoặc không phong quân
         if len(move) == 5:
             fr, fc, tr, tc, promotion = move
         else:
             fr, fc, tr, tc = move
             promotion = None
         # lấy vị trị hiện tại của quân cờ tương ứng với nơi bắt đâu luôn ví dụ piece[0][0] quân xe
+        # lấy quân cờ vị trí cũ
         piece = self.board[fr][fc]
+        # bổ sung
+        # lấy quân bị ăn nếu có
+        captured = self.board[tr][tc]
+        # nhập thành
+        if promotion == 'castle':
+            if piece == 'K':
+                self.white_king_moved = True
+                if tc == 6:
+                    self.board[7][5] = 'R'
+                    self.board[7][7] = EMPTY
+                else:
+                    self.board[7][3] = 'R'
+                    self.board[7][0] = EMPTY
+            elif piece == 'k':
+                self.black_king_moved = True
+                if tc == 6:
+                    self.board[0][5] = 'r'
+                    self.board[0][7] = EMPTY
+                else:
+                    self.board[0][3] = 'r'
+                    self.board[0][0] = EMPTY
         # cập nhật tranng thại của quân vua(king) khi nhập thành
+        # đánh dấu cho vua đã di chuyển
         if piece == 'K':
             self.white_king_moved = True
         elif piece == 'k':
             self.black_king_moved = True
         # cập nhật trạng thái của quân xe(rook) khi nhập thành
+        # đánh dấu xe đã di chuyển
         if piece == 'R':
             if fc == 0:
                 self.white_rook_moved['a'] = True
+            elif fc == 7:
+                self.white_rook_moved['h'] = True
+        if piece == 'r':
+            if fc == 0:
+                self.black_rook_moved['a'] = True
             elif fc == 7:
                 self.black_rook_moved['h'] = True
         # sau khi thực hiện nước đi ví dụ đi quân tốt thì nó sẽ
@@ -107,7 +137,7 @@ class Board:
         else:
             self.board[tr][tc] = piece
         # lưu lịch sử nước cờ vừa đi bằng phương thưc append mảng thêm vào
-        self.move_history.append(move)
+        self.move_history.append((fr, fc, tr, tc, captured, promotion))
         # đổi lượt đi giữa quân trắng và quân đen sử dụng toán tử 3 ngôi
         self.turn = BLACK if self.turn == WHITE else WHITE
 
@@ -354,6 +384,7 @@ class Board:
             (0, -1), (0, 1),
             (1, -1), (1, 0), (1, 1)
         ]
+        enemy = BLACK if is_white_king else WHITE
         # duyệt quân các hướng đi hợp lý của quân vua
         for dr, dc in directions:
             nr = r + dr
@@ -366,10 +397,13 @@ class Board:
                     moves.append((r, c, nr, nc))
                 # kiểm tra ăn quân
                 elif is_white_king and self.is_black(target):
-                    moves.append((r, c, nr, nc))
+                    # ngăn cho quân vau không đi nhầm vào ô quân khác
+                    if not self.is_square_attacked(nr, nc, enemy):
+                        moves.append((r, c, nr, nc))
                 # ngược lại
                 elif not is_white_king and self.is_white(target):
-                    moves.append((r, c, nr, nc))
+                    if not self.is_square_attacked(nr, nc, enemy):
+                        moves.append((r, c, nr, nc))
         # nhập thành
         if piece == 'K':
             moves.extend(self.generate_castling_moves_w(r, c))
@@ -413,7 +447,7 @@ class Board:
             return self.generate_king_moves(r, c)
         return []
 
-    # Liệt kê tất cả các nước đi của quân trắng hoặc đen
+    # Liệt kê tất cả các nước đi của quân trắng hoặc đen đặc biet là chưa xét đến chiếu tướng
     def generate_all_pseudo_moves(self, color):
         # khởi tạo một mảng chứa tất cả các nước đi của bên trăng hoặc đen
         moves = []
@@ -437,35 +471,43 @@ class Board:
     def is_in_check(self, color):
         # tìm quân vua
         king_pos = self.find_king(color)
-        # kiem tra quan minh va dối thủ
+        # nếu không tìm thấy quân vua sẽ trả về sai
+        if not king_pos:
+            return False
         opponent = BLACK if color == WHITE else WHITE
-        for move in self.generate_all_pseudo_moves(opponent):
-            tr, tc = move[2], move[3]
-            if (tr, tc) == king_pos:
-                return True
-        return False
+        kr, kc = king_pos
+        return self.is_square_attacked(kr, kc, opponent)
 
     # lọc nước đi hợp lệ
     # quan trọng vì nó Đi thử -> kiểm tra -> quay lại như cu
     def undo_move(self):
-        move = self.move_history.pop()
-        # nếu là quan muốn phong
-        if len(move) == 5:
-            fr, fc, tr, tc, promotion = move
-            pawn = 'P' if promotion.isupper() else 'p'
-            self.board[tr][tc] = EMPTY
-            self.board[fr][fc] = pawn
-        # nước đi bình thuong
-        else:
-            fr, fc, tr, tc = move
-            piece = self.board[tr][tc]
-            self.board[tr][tc] = EMPTY
-            self.board[fr][fc] = piece
+        fr, fc, tr, tc, captured, promotion = self.move_history.pop()
+        piece = self.board[tr][tc]
+        # ho tác nhập thành
+        if promotion == 'castle':
+            if piece == 'K':
+                if tc == 6:
+                    self.board[7][7] = 'R'
+                    self.board[7][5] = EMPTY
+                else:
+                    self.board[7][0] = 'R'
+                    self.board[7][3] = EMPTY
+                self.white_king_moved = False
+            elif piece == 'k':
+                if tc == 6:
+                    self.board[0][7] = 'r'
+                    self.board[0][5] = EMPTY
+                else:
+                    self.board[0][0] = 'r'
+                    self.board[0][3] = EMPTY
+                self.black_king_moved = False
+        self.board[fr][fc] = piece
+        self.board[tr][tc] = captured
         # đổi lượt
         self.turn = BLACK if self.turn == WHITE else WHITE
 
     # Sinh nước đi hơp lệ mục đích tìm ra quân chiếu và lọc các nuoc đi hợp lệ không bị chiếu
-    # không để cho vua của mình bị chiếu sau khi đi
+    # không để cho vua của mình bị chiếu sau khi đi một nước bất kỳ
     def generate_legal_moves(self, r, c):
         # khởi tạo mảng các nước đi hợp lệ là rỗng
         legal_moves = []
@@ -489,12 +531,33 @@ class Board:
     # nhập thành
     # kiểm tra nhập thành có bị chieu trươc khi nhập thành không
     def is_square_attacked(self, r, c, by_color):
-        for move in self.generate_all_pseudo_moves(by_color):
-            # đây chính là hai phần tử row col target của quân địch
-            if move[2] == r and move[3] == c:
-                return True
+        for rr in range(8):
+            for cc in range(8):
+                piece = self.board[rr][cc]
+                if piece == EMPTY:
+                    continue
+                if by_color == WHITE and not self.is_white(piece):
+                    continue
+                if by_color == BLACK and not self.is_black(piece):
+                    continue
+                if piece.lower() == 'p':
+                    dr = -1 if piece == 'P' else 1
+                    for dc in (-1, 1):
+                        if rr + dr == r and cc + dc == c:
+                            return True
+                else:
+                    if piece.lower() == 'k':
+                        for dr in (-1, 0, 1):
+                            for dc in (-1, 0, 1):
+                                if dr == 0 and dc == 0:
+                                    continue
+                                if rr + dr == r and cc + dc == c:
+                                    return True
+                    else:
+                        for mr, mc in self.generate_piece_moves(rr, cc):
+                            if mr == r and mc == c:
+                                return True
         return False
-
     # hàm sinh nước đi cho nhập thành quân trắng
     def generate_castling_moves_w(self, r, c):
         moves = []
