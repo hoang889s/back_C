@@ -137,7 +137,7 @@ class Board:
         else:
             self.board[tr][tc] = piece
         # lưu lịch sử nước cờ vừa đi bằng phương thưc append mảng thêm vào
-        self.move_history.append((fr, fc, tr, tc, captured, promotion))
+        self.move_history.append((fr, fc, tr, tc, captured, promotion,self.white_king_moved,self.black_king_moved,self.white_rook_moved.copy(),self.black_rook_moved.copy()))
         # đổi lượt đi giữa quân trắng và quân đen sử dụng toán tử 3 ngôi
         self.turn = BLACK if self.turn == WHITE else WHITE
 
@@ -380,8 +380,8 @@ class Board:
         is_white_king = piece == 'K'
         # 8 hướng đi của quân vua
         directions = [
-            (-1, -1), (1, 0), (-1, 1),
-            (0, -1), (0, 1),
+            (-1, -1), (-1, 0), (-1, 1),
+            (0, -1),            (0, 1),
             (1, -1), (1, 0), (1, 1)
         ]
         enemy = BLACK if is_white_king else WHITE
@@ -392,18 +392,13 @@ class Board:
             # kiểm tra ở trong phạm vi
             if 0 <= nr < 8 and 0 <= nc < 8:
                 target = self.board[nr][nc]
-                # kiểm tra di chuyển hợp lệ
-                if target == EMPTY:
-                    moves.append((r, c, nr, nc))
-                # kiểm tra ăn quân
-                elif is_white_king and self.is_black(target):
-                    # ngăn cho quân vau không đi nhầm vào ô quân khác
-                    if not self.is_square_attacked(nr, nc, enemy):
-                        moves.append((r, c, nr, nc))
-                # ngược lại
-                elif not is_white_king and self.is_white(target):
-                    if not self.is_square_attacked(nr, nc, enemy):
-                        moves.append((r, c, nr, nc))
+                # kiểm tra di chuyển hợp lệ và xử lý king adjacency khi hai vua đứng cạnh hoặc không đi bị chiếu
+                if target == EMPTY or \
+                    (is_white_king and self.is_black(target)) or \
+                        (not is_white_king and self.is_white(target)):
+                        if not self.is_square_attacked(nr, nc, enemy):
+                            moves.append((r, c, nr, nc))
+                    
         # nhập thành
         if piece == 'K':
             moves.extend(self.generate_castling_moves_w(r, c))
@@ -480,8 +475,12 @@ class Board:
 
     # lọc nước đi hợp lệ
     # quan trọng vì nó Đi thử -> kiểm tra -> quay lại như cu
+    # cần sửa chữa hàm vì nó đang làm cây tìm kiếm bị sai lệch 
+    # cách node đang chạy sai cho minimax
+    # đánh giá sai
     def undo_move(self):
-        fr, fc, tr, tc, captured, promotion = self.move_history.pop()
+        # thêm các nước đi quay lại cho quân xe và vua
+        (fr, fc, tr, tc, captured, promotion, prev_wk, prev_bk, prev_wr, prev_br) = self.move_history.pop()
         piece = self.board[tr][tc]
         # ho tác nhập thành
         if promotion == 'castle':
@@ -503,6 +502,11 @@ class Board:
                 self.black_king_moved = False
         self.board[fr][fc] = piece
         self.board[tr][tc] = captured
+        # thêm ở trạng thái self
+        self.white_king_moved = prev_wk
+        self.black_king_moved = prev_bk
+        self.white_rook_moved = prev_wr
+        self.black_rook_moved = prev_br
         # đổi lượt
         self.turn = BLACK if self.turn == WHITE else WHITE
 
@@ -554,8 +558,10 @@ class Board:
                                 if rr + dr == r and cc + dc == c:
                                     return True
                     else:
-                        for mr, mc in self.generate_piece_moves(rr, cc):
-                            if mr == r and mc == c:
+                        for move in self.generate_piece_moves(rr, cc):
+                            tr = move[2] 
+                            tc = move[3]   
+                            if tr == r and tc == c:
                                 return True
         return False
     # hàm sinh nước đi cho nhập thành quân trắng
@@ -570,14 +576,14 @@ class Board:
                 return moves
             opponent = BLACK
             # nhập thành canh vua
-            if not self.white_rook_moved['h']:
+            if not self.white_rook_moved['h'] and self.board[7][7] == 'R': 
                 if self.board[7][5] == EMPTY and self.board[7][6] == EMPTY:
                     if not self.is_square_attacked(7, 4, opponent) and \
                             not self.is_square_attacked(7, 5, opponent) and \
                             not self.is_square_attacked(7, 6, opponent):
                         moves.append((7, 4, 7, 6, 'castle'))
             # nhâp thành cánh hậu
-            if not self.white_rook_moved['a']:
+            if not self.white_rook_moved['a'] and self.board[7][0] == 'R':
                 if self.board[7][1] == EMPTY and self.board[7][2] == EMPTY and self.board[7][3] == EMPTY:
                     if not self.is_square_attacked(7, 4, opponent) and \
                             not self.is_square_attacked(7, 3, opponent) and \
@@ -593,16 +599,16 @@ class Board:
             if self.black_king_moved:
                 return moves
             opponent = WHITE
-            if not self.black_rook_moved['h']:
+            if not self.black_rook_moved['h'] and self.board[0][7] == 'r':
                 if self.board[0][5] == EMPTY and self.board[0][6] == EMPTY:
                     if not self.is_square_attacked(0, 4, opponent) and \
                        not self.is_square_attacked(0, 5, opponent) and \
                        not self.is_square_attacked(0, 6, opponent):
                         moves.append((0, 4, 0, 6, 'castle'))
-                if not self.black_rook_moved['a']:
-                    if self.board[0][1] == EMPTY and self.board[0][2] == EMPTY and self.board[0][3] == EMPTY:
-                        if not self.is_square_attacked(0, 4, opponent) and \
-                           not self.is_square_attacked(0, 3, opponent) and \
-                           not self.is_square_attacked(0, 2, opponent):
-                            moves.append((0, 4, 0, 2, 'castle'))
+            if not self.black_rook_moved['a'] and self.board[0][0] == 'r':
+                if self.board[0][1] == EMPTY and self.board[0][2] == EMPTY and self.board[0][3] == EMPTY:
+                    if not self.is_square_attacked(0, 4, opponent) and \
+                        not self.is_square_attacked(0, 3, opponent) and \
+                        not self.is_square_attacked(0, 2, opponent):
+                         moves.append((0, 4, 0, 2, 'castle'))
         return moves
