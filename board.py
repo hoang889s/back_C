@@ -72,73 +72,106 @@ class Board:
     def is_black(self, piece):
         return piece.islower()
 
-    # thực hiện các nước đi để thử lưu ý chưa có luật củ thể ở hàm này
-    # chỉ giả lập gồm 4 chỉ số chính fr,fc,tr,tc là first row (bắt đầu ở hàng) ,
-    # first column (cột bắt đầu), to row (đên cột), to column(đến cột)
-    def make_move(self, move):
-        # một kiêu tuple ví dụ move là (6,4,4,4) thì nó sẽ gán lần lượt các biến fr=6, fc=4,tr=4,tc=4 một kiểu giải nén
-        # đay là một kiểu giải nén nước đi nó có thể phong quân hoặc không phong quân
-        if len(move) == 5:
-            fr, fc, tr, tc, promotion = move
+    #hàm làm di chuyển quân cờ bản chỉnh sửa lưu trạng thái trước
+  
+    def make_move(self,move):
+        # giải nén các trạng thái một quân cờ
+        # move sẽ có nhiều dạng fr,fc,tr,tc,move_type(kiểu di chuyển)
+        if (len(move) == 5):
+            fr, fc, tr, tc, move_type = move
         else:
             fr, fc, tr, tc = move
-            promotion = None
-        # lấy vị trị hiện tại của quân cờ tương ứng với nơi bắt đâu luôn ví dụ piece[0][0] quân xe
-        # lấy quân cờ vị trí cũ
+            move_type = None
+        # gán các đi hiện tại 
+        # nước cờ đang đứng
         piece = self.board[fr][fc]
-        # bổ sung
-        # lấy quân bị ăn nếu có
+        # nước cờ mục tiêu
         captured = self.board[tr][tc]
+        # lưu lại toàn bộ các trạng thái trước khi di chuyển
+        self.move_history.append({
+            "fr":fr,
+            "fc":fc,
+            "tr":tr,
+            "tc":tc,
+            "piece":piece,
+            "captured":captured,
+            "move_type":move_type,
+            "white_king_moved":self.white_king_moved,
+            "black_king_moved":self.black_king_moved,
+            "white_rook_moved":self.white_rook_moved.copy(),
+            "black_rook_moved":self.black_rook_moved.copy(),
+            "turn":self.turn
+        })
+        # di chuyển quân cờ
+        # gán nước cờ hiện tại thành . (EMPTY)
+        self.board[fr][fc] = EMPTY
         # nhập thành
-        if promotion == 'castle':
+        if move_type == "castle":
+            self.board[tr][tc] = piece
+            # nếu là vua bên trắng thì
             if piece == 'K':
+                # nhận biết vua đã di chuyển
                 self.white_king_moved = True
+                # cánh vua
                 if tc == 6:
                     self.board[7][5] = 'R'
                     self.board[7][7] = EMPTY
-                else:
+                # cánh hau
+                elif tc ==2:
                     self.board[7][3] = 'R'
                     self.board[7][0] = EMPTY
-            elif piece == 'k':
+            # nếu là vua bên đen thì
+            elif piece == "k":
+                # nhận biết vua đen đã di chuyển
                 self.black_king_moved = True
+                # cánh vua
                 if tc == 6:
                     self.board[0][5] = 'r'
                     self.board[0][7] = EMPTY
                 else:
                     self.board[0][3] = 'r'
                     self.board[0][0] = EMPTY
-        # cập nhật tranng thại của quân vua(king) khi nhập thành
-        # đánh dấu cho vua đã di chuyển
+        # phần promotion (phong quân tốt)
+        # nếu move_type đúng và move_type bắt đầu bằng promotion
+        elif move_type and move_type.startswith("promotion"):
+            # lấy chữ cái đầu sau khi promotion ví dụ promotion_Q lấy 1 ký tự
+            promoted_piece = move_type.split("_")[1]
+            # phân biệt quân hai bên nếu trắng đùng chữ không thì ngược lại
+            if self.is_white(piece):
+                self.board[tr][tc] = promoted_piece.upper()
+            else:
+                self.board[tr][tc] = promoted_piece.lower()
+        # nếu không gì thì đi như bình thường
+        else:
+            self.board[tr][tc] = piece
+        # trạng thái của quân vua và quân xe sau khi di chuyển
         if piece == 'K':
             self.white_king_moved = True
         elif piece == 'k':
             self.black_king_moved = True
-        # cập nhật trạng thái của quân xe(rook) khi nhập thành
-        # đánh dấu xe đã di chuyển
         if piece == 'R':
             if fc == 0:
                 self.white_rook_moved['a'] = True
             elif fc == 7:
                 self.white_rook_moved['h'] = True
-        if piece == 'r':
+        elif piece == 'r':
             if fc == 0:
                 self.black_rook_moved['a'] = True
             elif fc == 7:
                 self.black_rook_moved['h'] = True
-        # sau khi thực hiện nước đi ví dụ đi quân tốt thì nó sẽ
-        # thực hiện xóa nước cũ thì nó tương ứng là đổi thành dấu chấm
-        self.board[fr][fc] = EMPTY
-        # them phong quan o day sau khi đi thuc hien cập nhật nước cờ mới tr,tc để hiện thị sau khi đi
-        if promotion:
-            if self.is_white(piece):
-                self.board[tr][tc] = promotion.upper()
-            else:
-                self.board[tr][tc] = promotion.lower()
-        else:
-            self.board[tr][tc] = piece
-        # lưu lịch sử nước cờ vừa đi bằng phương thưc append mảng thêm vào
-        self.move_history.append((fr, fc, tr, tc, captured, promotion,self.white_king_moved,self.black_king_moved,self.white_rook_moved.copy(),self.black_rook_moved.copy()))
-        # đổi lượt đi giữa quân trắng và quân đen sử dụng toán tử 3 ngôi
+        # xủ lý khi quân xe bị ăn
+        if captured == 'R':
+            if tr == 7 and tc == 0:
+                self.white_rook_moved['a'] = True
+            elif tr == 7 and tc == 7:
+                self.white_rook_moved['h'] = True
+        if captured == 'r':
+            if tr == 0 and tc == 0:
+                self.black_rook_moved['a'] = True
+            elif tr == 0 and tc == 7:
+                self.black_rook_moved['h'] = True
+
+        # đổi lượt
         self.turn = BLACK if self.turn == WHITE else WHITE
 
     # Việc tiếp theo cần làm tình ra cách sinh nước đi hop le :) generate_pseudo_move
