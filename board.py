@@ -505,44 +505,39 @@ class Board:
         opponent = BLACK if color == WHITE else WHITE
         kr, kc = king_pos
         return self.is_square_attacked(kr, kc, opponent)
-
-    # lọc nước đi hợp lệ
-    # quan trọng vì nó Đi thử -> kiểm tra -> quay lại như cu
-    # cần sửa chữa hàm vì nó đang làm cây tìm kiếm bị sai lệch 
-    # cách node đang chạy sai cho minimax
-    # đánh giá sai
+    # hàm quay lại quân cờ
     def undo_move(self):
-        # thêm các nước đi quay lại cho quân xe và vua
-        (fr, fc, tr, tc, captured, promotion, prev_wk, prev_bk, prev_wr, prev_br) = self.move_history.pop()
-        piece = self.board[tr][tc]
-        # ho tác nhập thành
-        if promotion == 'castle':
-            if piece == 'K':
+        # lấy trạng thị quân cơ trong cấu trúc 
+        state = self.move_history.pop()
+        fr = state["fr"]
+        fc = state["fc"]
+        tr = state["tr"]
+        tc = state["tc"]
+        # tra lại quân cũ 
+        self.board[fr][fc] = state["piece"]
+        self.board[tr][tc] = state["captured"]
+        # ở trạng thái castle sẽ trả lại quân xe 
+        if state["move_type"] == "castle":
+            if state["piece"] == "K":
                 if tc == 6:
                     self.board[7][7] = 'R'
                     self.board[7][5] = EMPTY
                 else:
                     self.board[7][0] = 'R'
                     self.board[7][3] = EMPTY
-                self.white_king_moved = False
-            elif piece == 'k':
+            elif state["piece"] == 'k':
                 if tc == 6:
                     self.board[0][7] = 'r'
                     self.board[0][5] = EMPTY
                 else:
                     self.board[0][0] = 'r'
                     self.board[0][3] = EMPTY
-                self.black_king_moved = False
-        self.board[fr][fc] = piece
-        self.board[tr][tc] = captured
-        # thêm ở trạng thái self
-        self.white_king_moved = prev_wk
-        self.black_king_moved = prev_bk
-        self.white_rook_moved = prev_wr
-        self.black_rook_moved = prev_br
-        # đổi lượt
-        self.turn = BLACK if self.turn == WHITE else WHITE
-
+        # khôi phục các trạng thái
+        self.white_king_moved = state["white_king_moved"]
+        self.black_king_moved = state["black_king_moved"]
+        self.white_rook_moved = state["white_rook_moved"]
+        self.black_rook_moved = state["black_rook_moved"]
+        self.turn = state["turn"]
     # Sinh nước đi hơp lệ mục đích tìm ra quân chiếu và lọc các nuoc đi hợp lệ không bị chiếu
     # không để cho vua của mình bị chiếu sau khi đi một nước bất kỳ
     def generate_legal_moves(self, r, c):
