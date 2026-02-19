@@ -1,4 +1,6 @@
 from constants import WHITE, BLACK, EMPTY
+# bảng đánh giá thưởng phạt của quân tốt
+
 class Minimax:
     def __init__(self,depth):
         # khoi tao

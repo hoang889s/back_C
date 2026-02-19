@@ -476,6 +476,7 @@ class Board:
         return []
 
     # Liệt kê tất cả các nước đi của quân trắng hoặc đen đặc biet là chưa xét đến chiếu tướng
+    # hàm này có thể giúp ai đi các nước đi bất hợp lệ để chiếu tướng
     def generate_all_pseudo_moves(self, color):
         # khởi tạo một mảng chứa tất cả các nước đi của bên trăng hoặc đen
         moves = []
@@ -494,7 +495,31 @@ class Board:
                 elif color == BLACK and self.is_black(piece):
                     moves += self.generate_piece_moves(r, c)
         return moves
+    # hàm sinh nước đi hợp lệ đê chiếu vua
+    def generate_all_legal_moves(self,color):
+        legal = []
+        # duyet ban co
+        for r in range(8):
+            for c in range(8):
+                # lay quan co duyet duoc
+                piece = self.board[r][c]
+                # neu quan co rong tiep tuc xuong duoi
+                if piece == EMPTY:
+                    continue
+                # truong hop quan trang
+                if color == WHITE and self.is_white(piece):
+                    legal += self.generate_legal_moves(r,c)
+                elif color == BLACK and self.is_black(piece):
+                    legal += self.generate_legal_moves(r,c)
+        return legal
+    # ham kiem tra chieu het
+    def is_checkmate(self,color):
+        return self.is_in_check(color) and len(self.generate_all_legal_moves(color)) == 0
+    # ham kiem tra khong bi chieu het
+    def is_stalemate(self,color):
+        return not self.is_in_check(color) and len(self.generate_all_legal_moves(color))==0
 
+    
     # hàm kiểm tra chiếu tướng
     def is_in_check(self, color):
         # tìm quân vua
