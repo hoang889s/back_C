@@ -1,6 +1,74 @@
 from constants import WHITE, BLACK, EMPTY
-# bảng đánh giá thưởng phạt của quân tốt
+# bảng đánh giá thưởng phạt của quân tốt, mã , xe ,vua,hậu
+PAWN_TABLE = [
+    [ 0,  0,  0,  0,  0,  0,  0,  0],
+    [50, 50, 50, 50, 50, 50, 50, 50],
+    [10, 10, 20, 30, 30, 20, 10, 10],
+    [ 5,  5, 10, 25, 25, 10,  5,  5],
+    [ 0,  0,  0, 20, 20,  0,  0,  0],
+    [ 5, -5,-10,  0,  0,-10, -5,  5],
+    [ 5, 10, 10,-20,-20, 10, 10,  5],
+    [ 0,  0,  0,  0,  0,  0,  0,  0]
+]
+KNIGHT_TABLE = [
+    [-50,-40,-30,-30,-30,-30,-40,-50],
+    [-40,-20,  0,  0,  0,  0,-20,-40],
+    [-30,  0, 10, 15, 15, 10,  0,-30],
+    [-30,  5, 15, 20, 20, 15,  5,-30],
+    [-30,  0, 15, 20, 20, 15,  0,-30],
+    [-30,  5, 10, 15, 15, 10,  5,-30],
+    [-40,-20,  0,  5,  5,  0,-20,-40],
+    [-50,-40,-30,-30,-30,-30,-40,-50]
+]
+BISHOP_TABLE = [
+    [-20,-10,-10,-10,-10,-10,-10,-20],
+    [-10,  0,  0,  0,  0,  0,  0,-10],
+    [-10,  0,  5, 10, 10,  5,  0,-10],
+    [-10,  5,  5, 10, 10,  5,  5,-10],
+    [-10,  0, 10, 10, 10, 10,  0,-10],
+    [-10, 10, 10, 10, 10, 10, 10,-10],
+    [-10,  5,  0,  0,  0,  0,  5,-10],
+    [-20,-10,-10,-10,-10,-10,-10,-20]
+]
+ROOK_TABLE = [
+    [ 0,  0,  0,  0,  0,  0,  0,  0],
+    [ 5, 10, 10, 10, 10, 10, 10,  5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [-5,  0,  0,  0,  0,  0,  0, -5],
+    [ 0,  0,  0,  5,  5,  0,  0,  0]
+]
+QUEEN_TABLE = [
+    [-20,-10,-10, -5, -5,-10,-10,-20],
+    [-10,  0,  0,  0,  0,  0,  0,-10],
+    [-10,  0,  5,  5,  5,  5,  0,-10],
+    [ -5,  0,  5,  5,  5,  5,  0, -5],
+    [  0,  0,  5,  5,  5,  5,  0, -5],
+    [-10,  5,  5,  5,  5,  5,  0,-10],
+    [-10,  0,  5,  0,  0,  0,  0,-10],
+    [-20,-10,-10, -5, -5,-10,-10,-20]
+]
+KING_TABLE_MIDDLE = [
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-30,-40,-40,-50,-50,-40,-40,-30],
+    [-20,-30,-30,-40,-40,-30,-30,-20],
+    [-10,-20,-20,-20,-20,-20,-20,-10],
+    [ 20, 20,  0,  0,  0,  0, 20, 20],
+    [ 20, 30, 10,  0,  0, 10, 30, 20]
 
+]
+PST = {
+    'P':PAWN_TABLE,
+    'N':KNIGHT_TABLE,
+    'B':BISHOP_TABLE,
+    'R':ROOK_TABLE,
+    'Q':QUEEN_TABLE,
+    'K':KING_TABLE_MIDDLE
+}
 class Minimax:
     def __init__(self,depth):
         # khoi tao
@@ -16,78 +84,102 @@ class Minimax:
         }
         for r in range(8):
             for c in range(8):
+                # lấy quân cờ hiện tại
                 piece = board.board[r][c]
-                # bo qua dau cham EMPTY
+                # nếu là dấu chấm bỏ qua
                 if piece == EMPTY:
                     continue
-                value = piece_values[piece.upper()]
+                # chuyển toàn bộ giá trị sang chữ hoa
+                p_type = piece.upper()
+                # tạo giá trị vừa lấy được
+                value = piece_values[p_type]
+                # gán bảng đánh giá
+                table = PST.get(p_type,None)
+                # quân trắng
                 if piece.isupper():
-                    score += value
+                    pos_bonus = table[r][c] if table else 0
+                    score += value + pos_bonus
                 else:
-                    score -= value
+                    pos_bonus = table[7-r][c] if table else 0
+                    score -= (value+pos_bonus) 
         return score
-    # hàm minimax
-    def minimax(self, board, depth, maximizing):
-        # nếu độ sâu bằng 0 thì đánh giá luôn
-        if depth==0:
+    # hàm minimax kết hợp alpha,beta
+    def minimax(self,board,depth,alpha,beta, maximizing):
+        current_color = WHITE if maximizing else BLACK
+        # kết thúc bàn cờ
+        if board.is_checkmate(current_color):
+            # bị chiếu hết (thua)
+            return -99999 if maximizing else 99999
+        # nếu không bị chiếu hết
+        if board.is_stalemate(current_color):
+            return 0;# hòa
+        # nếu độ sâu bằng 0 thì đánh giá
+        if depth == 0:
             return self.evaluate(board)
-        # nếu lớn nhất đúng thì
+        # lấy nước đi hợp lệ
+        all_moves = board.generate_all_pseudo_moves(current_color)
+        # nếu maximizing đúng
         if maximizing:
-            # tạo ra một số vô cùng nhỏ
-            max_eval = -float('inf')
-            # lấy toàn bộ nước đi
-            moves = board.generate_all_pseudo_moves(WHITE)
-            for move in moves:
-                # thực hiện di chuyển các nước đi đã liệt kê
-                board.make_move(move)
-                eval = self.minimax(board,depth-1,False)
-                # sau khi đi xong thì hoàn lại các bước đi
-                board.undo_move()
-                max_eval = max(max_eval,eval)
-            return max_eval
-        # ngược lại
-        else:
-            # tạo ra một sô siêu lớn
-            min_eval = float('inf')
-            # lấy toàn bộ nước đi bên đen
-            moves = board.generate_all_pseudo_moves(BLACK)
-            for move in moves:
-                board.make_move(move)
-                eval = self.minimax(board,depth-1,True)
-                min_eval = min(min_eval,eval)
-            return min_eval
-    # hàm tìm nước đi tốt nhất
-    def find_best_move(self,board,color):
-        # nước đi tốt nhất
-        best_move = None
-        # bên trắng
-        if color == WHITE:
             # một số cực nhỏ
-            best_value = -float('inf')
-            # lấy toàn bộ nước đi
-            moves = board.generate_all_pseudo_moves(WHITE)
-            for move in moves:
+            max_eval = -float('inf')
+            for move in all_moves:
                 board.make_move(move)
-                value = self.minimax(board,self.depth-1,False)
+                # gọi đệ quy cho trường hợp max
+                eval_score = self.minimax(board,depth-1,alpha,beta,False)
+                # hoàn tác nước đi
                 board.undo_move()
-                if value > best_value:
-                    best_value = value
-                    best_move = move
-        # bên đen
+                max_eval = max(max_eval,eval_score)
+                alpha = max(alpha,eval_score)
+                if beta <= alpha:
+                    break
+            return max_eval
         else:
-            # một số rất lớn
-            best_value = float('inf')
-            moves = board.generate_all_pseudo_moves(BLACK)
-            for move in moves:
+            min_eval = float('inf')
+            for move in all_moves:
                 board.make_move(move)
-                value = self.minimax(board,self.depth-1,True)
+                eval_score = self.minimax(board,depth-1,alpha,beta,True)
                 board.undo_move()
-                if value < best_value:
-                    best_value = value
-                    best_move = move
-        return best_move
-            
+                min_eval = min(min_eval,eval_score)
+                beta = min(beta,eval_score)
+                if beta <= alpha:
+                    break
+            return min_eval
+# hàm tìm nước đi
+def find_best_move(self,board,color):
+    # tạo best_move rỗng 
+    best_move = None
+    # bên quân trắng
+    if color == WHITE:
+        # giá trị nhỏ nhất
+        best_value = -float('inf')
+        # một số rất nhỏ và một số rất lớn
+        alpha = -float('inf')
+        beta = float('inf')
+        # lấy toàn bộ nước đi hợp lệ
+        moves = board.generate_all_legal_moves(WHITE)
+        for move in moves:
+            value = self.minimax(board,self.depth-1,alpha,beta,False)
+            # hoàn tác nước đi
+            board.undo_move()
+            if value > best_value:
+                best_value = value
+                best_move = move
+            alpha = max(alpha,value)
+    else:
+        best_value = float('inf')
+        moves = board.generate_all_legal_moves(BLACK)
+        for move in moves:
+            value = self.minimax(boar,self.depth-1,alpha,beta,True)
+            board.undo_move()
+            if value < best_value:
+                best_value = value
+                best_move = move
+            beta = min(beta,value)
+    return best_move
 
+         
+
+   
 
 
 
