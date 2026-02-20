@@ -144,38 +144,39 @@ class Minimax:
                 if beta <= alpha:
                     break
             return min_eval
-# hàm tìm nước đi
-def find_best_move(self,board,color):
-    # tạo best_move rỗng 
-    best_move = None
-    # bên quân trắng
-    if color == WHITE:
-        # giá trị nhỏ nhất
-        best_value = -float('inf')
-        # một số rất nhỏ và một số rất lớn
+    # hàm tìm nước đi
+    def find_best_move(self,board,color):
+        # tạo best_move rỗng 
+        best_move = None
+        # 2 giá trị nhỏ và lớn
         alpha = -float('inf')
         beta = float('inf')
-        # lấy toàn bộ nước đi hợp lệ
-        moves = board.generate_all_legal_moves(WHITE)
-        for move in moves:
-            value = self.minimax(board,self.depth-1,alpha,beta,False)
-            # hoàn tác nước đi
-            board.undo_move()
-            if value > best_value:
-                best_value = value
-                best_move = move
-            alpha = max(alpha,value)
-    else:
-        best_value = float('inf')
-        moves = board.generate_all_legal_moves(BLACK)
-        for move in moves:
-            value = self.minimax(boar,self.depth-1,alpha,beta,True)
-            board.undo_move()
-            if value < best_value:
-                best_value = value
-                best_move = move
-            beta = min(beta,value)
-    return best_move
+        # bên quân trắng
+        if color == WHITE:
+            # giá trị nhỏ nhất
+            best_value = -float('inf')
+            # lấy toàn bộ nước đi hợp lệ
+            moves = board.generate_all_legal_moves(WHITE)
+            for move in moves:
+                board.make_move(move)
+                value = self.minimax(board,self.depth-1,alpha,beta,False)
+                board.undo_move()
+                if value > best_value:
+                    best_value = value
+                    best_move = move
+                alpha = max(alpha,value)
+        else:
+            best_value = float('inf')
+            moves = board.generate_all_legal_moves(BLACK)
+            for move in moves:
+                board.make_move(move)
+                value = self.minimax(board,self.depth-1,alpha,beta,True)
+                board.undo_move()
+                if value < best_value:
+                    best_value = value
+                    best_move = move
+                beta = min(beta,value)
+        return best_move
 
          
 
