@@ -1,7 +1,14 @@
 # khu vực bàn cờ
 from constants import WHITE, BLACK, EMPTY
-
-
+import random
+# Sinh bảng số ngẫu nhiên 64-bit một lần duy nhất khi khởi động
+# Mỗi (quân, hàng, cột) → một số ngẫu nhiên duy nhất
+_PIECES = ['P','N','B','R','Q','K','p','n','b','r','q','k']
+_ZOBRIST_TABLE = {
+    piece: [[random.getrandbits(64) for _ in range(8)] for _ in range(8)]
+    for piece in _PIECES
+}
+_ZOBRIST_TURN = random.getrandbits(64)   # XOR vào khi đến lượt đen
 # định nghĩa lớp bàn cờ
 class Board:
     # self.board = [
@@ -563,6 +570,52 @@ class Board:
         self.white_rook_moved = state["white_rook_moved"]
         self.black_rook_moved = state["black_rook_moved"]
         self.turn = state["turn"]
+    # hàm get_hash
+    def get_hash(self):
+        # định nghĩa hash
+        h = 0
+        # duyệt toàn bộ bàn cờ
+        for r in range(8):
+            for c in range(8):
+                # lấy vị trí hiện tại
+                piece = self.board[r][c]
+                # Nếu ô đó có quân cờ (không phải ô trống) thì mới xử lý.
+                if piece != EMPTY:
+                    # XOR hash với giá trị Zobrist của quân cờ tại ô hiện tại.
+                    h ^= _ZOBRIST_TABLE[piece][r][c]
+        if self.turn == BLACK:
+            #XOR thêm một số ngẫu nhiên _ZOBRIST_TURN
+            h ^= _ZOBRIST_TURN
+        return h
+    # các hàm null proving
+    #'Bỏ lượt' – chỉ đổi lượt chơi, không di chuyển quân nào.
+    # Lưu trạng thái tối thiểu vào move_history để undo_null_move hoạt động.
+    def make_null_move(self):
+        # lưu vào move history 
+        self.move_history.append({
+            "fr":None, "fc":None, "tr":None, "tc":None,
+            "piece":None, "captured":None,
+            "move_type":"null_move",
+            "white_king_moved":self.white_king_moved,
+            "black_king_moved": self.black_king_moved,
+            "white_rook_moved": self.white_rook_moved.copy(),
+            "black_rook_moved": self.black_rook_moved.copy(),
+            "turn": self.turn
+        })
+        # đổi lượt
+        self.turn = BLACK if self.turn == WHITE else WHITE
+    def undo_null_move(self):
+        # Hoàn tác null move – khôi phục lượt chơi về trạng thái trước.
+        # stack
+        state = self.move_history.pop()
+        # khôi phục nước đi
+        self.turn = state["turn"]
+        # khôi phục trạng thái nhập thành
+        self.white_king_moved = state["white_king_moved"]
+        self.black_king_moved = state["black_king_moved"]
+        self.white_rook_moved = state["white_rook_moved"]
+        self.black_rook_moved = state["black_rook_moved"]
+
     # Sinh nước đi hơp lệ mục đích tìm ra quân chiếu và lọc các nuoc đi hợp lệ không bị chiếu
     # không để cho vua của mình bị chiếu sau khi đi một nước bất kỳ
     def generate_legal_moves(self, r, c):
@@ -643,7 +696,6 @@ class Board:
                             not self.is_square_attacked(7, 2, opponent):
                         moves.append((7, 4, 7, 2, 'castle'))
         return moves
-
     # dành cho quân đen
     def generate_castling_moves_b(self, r, c):
         moves = []

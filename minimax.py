@@ -61,6 +61,15 @@ KING_TABLE_MIDDLE = [
     [ 20, 30, 10,  0,  0, 10, 30, 20]
 
 ]
+# MVV-LVA bảng ưu tiên giá trị nạn nhân cao -> điểm cao giá trị tấn công cao -> điểm cao
+# vd Tốt ăn hậu -> ngon hậu ăn tốt -> không ngon
+MVV_LVA = {
+    ('P','P'):15,('P','N'):25,('P','B'):25,('P','R'):35,('P','Q'):45,
+    ('N','P'):14,('N','N'):24,('N','B'):24,('N','R'):34,('N','Q'):44,
+    ('B','P'):13,('B','N'):23,('B','B'):23,('B','R'):33,('B','Q'):43,
+    ('R','P'):12,('R','N'):22,('R','B'):22,('R','R'):32,('R','Q'):42,
+    ('Q','P'):11,('Q','N'):21,('Q','B'):21,('Q','R'):31,('Q','Q'):41,
+}
 PST = {
     'P':PAWN_TABLE,
     'N':KNIGHT_TABLE,
@@ -73,6 +82,18 @@ class Minimax:
     def __init__(self,depth):
         # khoi tao
         self.depth = depth
+        # giảm bớt các chuỗi nước đi lặp lại lưu(zobrist_hash)
+        self.transposition_table ={}
+        # giới hạn kích thước bảng TT
+        self.TT_MAX_SIZE= 1_000_000
+        # hỗ trợ việc cắt tỉa apla-beta mạnh hơn
+        self.killer_moves = [[None, None] for _ in range(64)]
+        # tăng khả năng search sâu
+        self.history_table ={}
+        # biến đếm node đã duyệt
+        self.node_searched = 0
+        # Tìm thấy vị trí trong transposition table
+        self.tt_hits =  0
     # ham gia ban co
     # ham nay danh gia diem so cac quan co
     def evaluate(self, board):
@@ -103,8 +124,102 @@ class Minimax:
                     pos_bonus = table[7-r][c] if table else 0
                     score -= (value+pos_bonus) 
         return score
+    # hàm xét nước mạnh trước
+    def _move_score(self,move,board,depth):
+        fr, fc, tr, tc = move[0], move[1], move[2], move[3]
+        target = board.board[tr][tc]
+        attacker = board.board[fr][fc]
+        # Ăn quân ưu tiên ăn quân cao nhất vd Tốt ăn Hậu → 10000 + 45 = 10045
+        if target != EMPTY:
+            return 10_000 + MVV_LVA.get((attacker.upper(),target.upper()),0)
+        # killer move
+        if move == self.killer_moves[depth][0]: return 9_000
+        if move == self.killer_moves[depth][1]:return 8_000
+        # history heuristic
+        return self.history_table.get((move[0],move[1]),0)
+    # 
+    def _order_moves(self,moves,board,depth):
+        # sắp xếp
+        return sorted(moves,key=lambda m: self._move_score(m,board,depth),reverse=True)
+    # hoạt động với nguyên lý khi có killer mới thì killer lên ví trí số một và killer cũ lên vị xuống số 2 
+    # giảm node sớm
+    def _update_killer(self,move,depth):
+        if move !=self.killer_moves[depth][0]:
+            self.killer_moves[depth][1] =self.killer_moves[depth][0]
+            self.killer_moves[depth][0] = move
+    # khi sắp xếp move sẽ ưu tiên những move có vị trí cao 
+    def _update_history(self,move,depth):
+        #key = (move[0],move[1])
+        key = (move[0], move[1], move[2], move[3])
+        self.history_table[key]=self.history_table.get(key,0)+depth*depth
+    # khi depth = 0 thì không dừng tìm kiếm mà tiếp tục tìm quân mới và đường đi mới
+    # tăng khả năng đánh giá
+    def quiescence(self,board,alpha,beta,maximizing,q_depth=4):
+        # đánh giá điểm bình thường
+        stand_pat = self.evaluate(board)
+        # nếu maximizing đúng 
+        if maximizing:
+            # cắt nhánh
+            if stand_pat >= beta:
+                return beta
+            alpha = max(alpha,stand_pat)
+            # đặt ra giới hạn để tránh search vô hạn
+            if q_depth == 0:
+                return alpha
+            #captures = [m for m in board.generate_all_pseudo_moves(WHITE)
+            #           if board.board[m[1][0]][m[1][1]]!=EMPTY]
+            captures = [m for m in board.generate_all_pseudo_moves(WHITE)
+                        if board.board[m[2]][m[3]] != EMPTY]
+            for move in self._order_moves(captures,board,0):
+                board.make_move(move)
+                # đệ quy gọi lại
+                score = self.quiescence(board,alpha,beta,False,q_depth-1)
+                board.undo_move()
+                if score >= beta:
+                    return beta
+                alpha = max(alpha,score)
+            return alpha
+        else:
+            if stand_pat <= alpha:
+                return alpha
+            beta = min(beta,stand_pat)
+            if q_depth == 0:
+                return beta
+            #captures = [m for m in board.generate_all_pseudo_moves(BLACK)
+                        #if board.board[m[1][0]][m[1][1]] != EMPTY]
+            captures = [m for m in board.generate_all_pseudo_moves(BLACK)
+                        if board.board[m[2]][m[3]] != EMPTY]
+
+            for move in self._order_moves(captures,board,0):
+                board.make_move(move)
+                score = self.quiescence(board,alpha,beta,True,q_depth-1)
+                board.undo_move()
+                if score <= alpha: return alpha
+                beta = min(beta, score)
+            return beta
     # hàm minimax kết hợp alpha,beta
     def minimax(self,board,depth,alpha,beta, maximizing):
+        # mỗi lần search tăng giá trị của node lên 1
+        self.node_searched +=1
+        # lưu alpha gốc
+        alpha_orig = alpha
+        # lấy hash của board
+        board_hash = board.get_hash() if hasattr(board,'get_hash') else None
+        # kiểm tra xem có trong bảng hash không
+        if board_hash and board_hash in self.transposition_table:
+            # lấy dữ liệu
+            tt_depth, tt_flag, tt_score = self.transposition_table[board_hash]
+            # khi đủ độ sâu
+            if tt_depth >= depth:
+                # cập nhật các giá trị cắt tỉa alpha beta
+                if tt_flag == 'EXACT':
+                    return tt_score
+                if tt_flag == 'LOWER':
+                    alpha = max(alpha,tt_score)
+                if tt_flag == 'UPPER':
+                    beta = min(beta,tt_score)
+                if alpha >= beta:
+                    return tt_score
         current_color = WHITE if maximizing else BLACK
         # kết thúc bàn cờ
         if board.is_checkmate(current_color):
@@ -115,69 +230,112 @@ class Minimax:
             return 0;# hòa
         # nếu độ sâu bằng 0 thì đánh giá
         if depth == 0:
-            return self.evaluate(board)
+            return self.quiescence(board,alpha,beta,maximizing)
         # lấy nước đi hợp lệ
-        all_moves = board.generate_all_pseudo_moves(current_color)
-        # nếu maximizing đúng
-        if maximizing:
-            # một số cực nhỏ
-            max_eval = -float('inf')
-            for move in all_moves:
+        all_moves = self._order_moves(board.generate_all_pseudo_moves(current_color),board,depth)
+        # Nếu ngay cả khi mình không đi mà vẫn không thua, thì mình đang quá mạnh.
+        # tối ưu khả search cho thuật toán
+        if (depth>=3 and hasattr(board,'make_null_move')and not board.is_in_check(current_color) and all_moves):
+            board.make_null_move()
+            null_score = self.minimax(board,depth-3,alpha,beta,not maximizing)
+            board.undo_null_move()
+            if maximizing and null_score >= beta:
+                return beta
+            if not maximizing and null_score<=alpha:
+                return alpha 
+        best_score = -float('inf') if maximizing else float('inf')
+        for i,move in enumerate(all_moves):
+            board.make_move(move)
+            fr, fc, tr, tc = move[0], move[1], move[2], move[3]
+            is_capture = board.board[tr][tc] != EMPTY            
+            skip = False
+            if i>=4 and depth>=3 and not is_capture and move not in self.killer_moves[depth]:
+                lmr =  self.minimax(board,depth-2,alpha,beta,not maximizing)
+                if(maximizing and lmr <= alpha) or (not maximizing and lmr >=beta):
+                    skip=True
+            if not skip:
+                eval_score = self.minimax(board,depth-1,alpha,beta,not maximizing)
+            board.undo_move()
+            if skip:
+                continue
+            # nếu maximizing đúng tìm điểm lớn nhất
+            if maximizing:
+                # cập nhật best_score
+                if eval_score >best_score:
+                    best_score=eval_score
+                if eval_score>alpha:
+                    alpha=eval_score
+                # cắt nhánh
+                if alpha>=beta:
+                # Nếu là non-capture → cập nhật heuristic
+                    if not is_capture:
+                        self._update_killer(move,depth)
+                        self._update_history(move,depth)
+                    break
+            else:
+                if eval_score < best_score: 
+                    best_score = eval_score
+                if eval_score < beta:      
+                    beta = eval_score
+                if beta <= alpha:
+                    if not is_capture:
+                        self._update_killer(move, depth)
+                        self._update_history(move, depth)
+                    break
+        # Lưu vào Transposition Table
+        if board_hash:
+            flag = ('UPPER' if best_score <=alpha_orig else 'LOWER' if best_score>=beta else'EXACT')
+            if len(self.transposition_table)<self.TT_MAX_SIZE:
+                self.transposition_table[board_hash] = (depth,flag,best_score)
+        return best_score
+
+
+    # hàm tìm nước đi tốt nhất
+    def find_best_move(self,board,color):
+        # reset thông số
+        # số node đã search
+        self.node_searched =0
+        # số lần trung Transposition Table
+        self.tt_hits = 0
+        # killer move cho lần tìm mới
+        self.killer_moves = [[None,None] for _ in range(64)]
+        # xác định là mã hay min
+        maximizing = (color==WHITE)
+        best_move  = None
+        # duyệt depth với khả năng tăng dần
+        for current_depth in range(1,self.depth+1):
+            # khởi tạo alpha beta
+            alpha = -float('inf')
+            beta = float('inf')
+            # lưu best move cho depth hiện tại
+            depth_best_move = None
+            depth_best_value = -float('inf') if maximizing else float('inf')
+            # lấy tất cả các nước đi
+            moves = board.generate_all_legal_moves(color)
+            # ưu tiên những thứ tốt nhất lên đầu tiên
+            if best_move and best_move in moves:
+                moves.remove(best_move)
+                moves.insert(0,best_move)
+            # duyệt move ở root
+            for move in moves:
                 board.make_move(move)
-                # gọi đệ quy cho trường hợp max
-                eval_score = self.minimax(board,depth-1,alpha,beta,False)
+                value = self.minimax(board,current_depth-1,alpha,beta,not maximizing)
                 # hoàn tác nước đi
                 board.undo_move()
-                max_eval = max(max_eval,eval_score)
-                alpha = max(alpha,eval_score)
-                if beta <= alpha:
-                    break
-            return max_eval
-        else:
-            min_eval = float('inf')
-            for move in all_moves:
-                board.make_move(move)
-                eval_score = self.minimax(board,depth-1,alpha,beta,True)
-                board.undo_move()
-                min_eval = min(min_eval,eval_score)
-                beta = min(beta,eval_score)
-                if beta <= alpha:
-                    break
-            return min_eval
-    # hàm tìm nước đi
-    def find_best_move(self,board,color):
-        # tạo best_move rỗng 
-        best_move = None
-        # 2 giá trị nhỏ và lớn
-        alpha = -float('inf')
-        beta = float('inf')
-        # bên quân trắng
-        if color == WHITE:
-            # giá trị nhỏ nhất
-            best_value = -float('inf')
-            # lấy toàn bộ nước đi hợp lệ
-            moves = board.generate_all_legal_moves(WHITE)
-            for move in moves:
-                board.make_move(move)
-                value = self.minimax(board,self.depth-1,alpha,beta,False)
-                board.undo_move()
-                if value > best_value:
-                    best_value = value
-                    best_move = move
-                alpha = max(alpha,value)
-        else:
-            best_value = float('inf')
-            moves = board.generate_all_legal_moves(BLACK)
-            for move in moves:
-                board.make_move(move)
-                value = self.minimax(board,self.depth-1,alpha,beta,True)
-                board.undo_move()
-                if value < best_value:
-                    best_value = value
-                    best_move = move
-                beta = min(beta,value)
+                # cắt tỉa
+                if maximizing:
+                    if value > depth_best_value:
+                        depth_best_value,depth_best_move = value,move
+                    alpha = max(alpha,value)
+                else:
+                    if value < depth_best_value:
+                        depth_best_value,depth_best_move = value,move
+                    beta = min(beta,value)
+            if depth_best_move:
+                best_move = depth_best_move
         return best_move
 
+       
          
 
    
