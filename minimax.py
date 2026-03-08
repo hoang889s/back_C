@@ -245,28 +245,33 @@ class Minimax:
                 return alpha 
         best_score = -float('inf') if maximizing else float('inf')
         for i,move in enumerate(all_moves):
-            board.make_move(move)
+            #board.make_move(move)
             fr, fc, tr, tc = move[0], move[1], move[2], move[3]
-            is_capture = board.board[tr][tc] != EMPTY            
-            skip = False
+            is_capture = board.board[tr][tc] != EMPTY 
+            board.make_move(move)           
+            #skip = False
             if i>=4 and depth>=3 and not is_capture and move not in self.killer_moves[depth]:
-                lmr =  self.minimax(board,depth-2,alpha,beta,not maximizing)
-                if(maximizing and lmr <= alpha) or (not maximizing and lmr >=beta):
-                    skip=True
-            if not skip:
-                eval_score = self.minimax(board,depth-1,alpha,beta,not maximizing)
+                lmr_score =  self.minimax(board,depth-2,alpha,beta,not maximizing)
+                if(maximizing and lmr_score <= alpha) or (not maximizing and lmr_score >=beta):
+                    board.undo_move()
+                    # undo xong mới continue
+                    continue
+            #if not skip:
+                #eval_score = self.minimax(board,depth-1,alpha,beta,not maximizing)
+            #board.undo_move()
+            #if skip:
+                #continue
+            eval_score = self.minimax(board, depth - 1, alpha, beta, not maximizing)
             board.undo_move()
-            if skip:
-                continue
             # nếu maximizing đúng tìm điểm lớn nhất
             if maximizing:
                 # cập nhật best_score
                 if eval_score >best_score:
-                    best_score=eval_score
-                if eval_score>alpha:
-                    alpha=eval_score
+                    best_score = eval_score
+                if eval_score > alpha:
+                    alpha = eval_score
                 # cắt nhánh
-                if alpha>=beta:
+                if alpha >= beta:
                 # Nếu là non-capture → cập nhật heuristic
                     if not is_capture:
                         self._update_killer(move,depth)
@@ -284,7 +289,7 @@ class Minimax:
                     break
         # Lưu vào Transposition Table
         if board_hash:
-            flag = ('UPPER' if best_score <=alpha_orig else 'LOWER' if best_score>=beta else'EXACT')
+            flag = ('UPPER' if best_score<= alpha_orig else 'LOWER' if best_score>=beta else'EXACT')
             if len(self.transposition_table)<self.TT_MAX_SIZE:
                 self.transposition_table[board_hash] = (depth,flag,best_score)
         return best_score

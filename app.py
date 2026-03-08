@@ -136,12 +136,12 @@ class GameRoutes:
             }), 422
         # ai phản hồi lại
         # Sau khi người chơi đi → kiểm tra trạng thái bên đen (AI)
-        ai_color_str = "black" if self.game.ai_color == BLACK else "white"
+        # ai_color_str = "black" if self.game.ai_color == BLACK else "white"
         post_player_status = self.game.get_game_status(self.game.ai_color)
         
         post_ai_status = None
         ai_move_json = None
-        if post_player_status["state"] == "ongoing" or post_player_status["state"] == "check":
+        if post_player_status["state"] in ("ongoing", "check"):
             ai_move = self.game.compute_ai_move()
             if ai_move:
                 ai_move_json = {
@@ -150,6 +150,10 @@ class GameRoutes:
                 }
                 # Sau khi AI đi → kiểm tra trạng thái bên người chơi (WHITE)
                 post_ai_status = self.game.get_game_status(WHITE)
+            else :
+                # AI không có nước đi → checkmate hoặc stalemate
+                # Buộc kiểm tra lại đúng trạng thái
+                post_ai_status= self.game.get_game_status(self.game.ai_color)
         # Xác định trạng thái cuối để trả về frontend
         final_status = post_ai_status if post_ai_status else post_player_status
 
