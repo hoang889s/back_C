@@ -1,0 +1,10 @@
+# === Backend hiện tại ===
+flask
+flask-cors
+# === Thêm mới cho Auth + Database ===
+flask-socketio          # chuẩn bị cho online mode sau này
+SQLAlchemy==2.0.*       # ORM kết nối SQL Server
+pyodbc                  # driver ODBC cho SQL Server
+PyJWT==2.8.*            # tạo & xác thực JWT token
+werkzeug                # bcrypt password hashing (đã có sẵn trong Flask)
+python-dotenv           # load biến môi trường từ file .env

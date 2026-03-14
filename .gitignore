@@ -6,3 +6,11 @@ __pycache__/
 # Virtual environment
 venv/
 .env/
+#  Environment variables biến môi trường
+.env
+.env.*
+# IDE
+.idea/
+.vscode/
+# Os
+.DS_Store
