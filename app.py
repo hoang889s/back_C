@@ -5,6 +5,9 @@ from minimax import Minimax
 from constants import WHITE, BLACK
 from typing import Optional
 import logging
+#  Import mới cho Auth + DB 
+from database import init_db
+from auth import auth_bp, login_required
 class Config:
     HOST = "127.0.0.1"
     PORT = 8000
@@ -183,6 +186,7 @@ class ChessApp:
         self.app    = Flask(__name__)
         self._setup_logging()
         self._setup_cors()
+        self._setup_db()
         self._setup_routes()
     # cài logging
     def _setup_logging(self):
@@ -194,8 +198,17 @@ class ChessApp:
     # cài cors cho phép bên khác gọi
     def _setup_cors(self):
         CORS(self.app)
+    def _setup_db(self):
+        # Tạo bảng khi khởi động (bỏ qua nếu đã tồn tại)
+        try:
+            init_db()
+        except Exception as e:
+            self.logger.warning(f"[DB] không thể init DB:{e}")
+            
     # cài routes
     def _setup_routes(self):
+        #  Auth routes (/auth/register, /auth/login, /auth/me, /auth/logout) 
+        self.app.register_blueprint(auth_bp)
         game   = GameManager(ai_depth=self.config.AI_DEPTH, ai_color=self.config.AI_COLOR)
         routes = GameRoutes(game)
 

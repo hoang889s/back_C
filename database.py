@@ -4,19 +4,19 @@ from sqlalchemy.pool import NullPool
 import os
 # Cấu hình sqlserver 
 # tên server hoặc ip
-DB_SERVER = os.getenv("DB_SERVER","localhost")
+DB_SERVER = os.getenv("DB_SERVER","localhost\\SQLEXPRESS")
 # tên database
 DB_NAME = os.getenv("DB_NAME","chess_online")
 # sa
 DB_USER = os.getenv("DB_USER","sa")
 # mật khẩu
-DB_PASSWORD = os.getenv("DB_PASSWORD","YourPassword123!")
+DB_PASSWORD = os.getenv("DB_PASSWORD","hoang123")
 DB_DRIVER = os.getenv("DB_DRIVER","ODBC Driver 17 for SQL Server")
 # kết nối với server
 # c1
 DATABASE_URL = (
     f"mssql+pyodbc://{DB_USER}:{DB_PASSWORD}@{DB_SERVER}/{DB_NAME}"
-    f"?driver={DB_DRIVER.replace(' ', '+')}"
+    f"?driver={DB_DRIVER.replace(' ', '+')}&TrustServerCertificate=yes"
 )
 # -- Cách 2: Windows Authentication (uncomment nếu dùng SSMS với Windows Auth)
 # DATABASE_URL = (
@@ -31,7 +31,7 @@ engine = create_engine(
     echo = False,
     fast_executemany=True
 )
-SessionLocal=  sessionmaker(bind=engine,autocommit=False,autoflush=False )
+SessionLocal=  sessionmaker(engine,autocommit=False,autoflush=False )
 class Base(DeclarativeBase):
     pass
 # Helper: lấy session (dùng trong route)

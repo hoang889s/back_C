@@ -1,8 +1,9 @@
-from sqlalchemy import Nullable
+#from sqlalchemy import Nullable
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text,
     ForeignKey, Enum as SAEnum
 )
+from sqlalchemy.dialects.mssql import DATETIME2
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -19,8 +20,8 @@ class User(Base):
     id = Column(Integer,primary_key=True,index= True)
     username = Column(String(50),unique=True,nullable=False,index=True)
     email = Column(String(120),unique=True,nullable=False,index=True)
-    password_hasd = Column(String(255),nullable=False)
-    created_at = Column(DateTime(timezone=True),server_default=func.now())
+    password_hash = Column(String(255),nullable=False)
+    created_at = Column(DATETIME2, server_default=func.now())
     games_as_white = relationship(
         "GameHistory",foreign_keys = "GameHistory.white_player_id",back_populates = "white_player"
     )
