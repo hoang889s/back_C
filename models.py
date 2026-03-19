@@ -8,6 +8,10 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 from database import Base
+# phân quyền
+class UserRole(str,enum.Enum):
+    ADMIN = "admin"
+    USER = "user"
 # trạng thái ván đầu
 class GameResult(str,enum.Enum):
     WIN = "win"
@@ -21,6 +25,7 @@ class User(Base):
     username = Column(String(50),unique=True,nullable=False,index=True)
     email = Column(String(120),unique=True,nullable=False,index=True)
     password_hash = Column(String(255),nullable=False)
+    role = Column(SAEnum(UserRole), default=UserRole.USER, nullable=False)
     created_at = Column(DATETIME2, server_default=func.now())
     games_as_white = relationship(
         "GameHistory",foreign_keys = "GameHistory.white_player_id",back_populates = "white_player"
