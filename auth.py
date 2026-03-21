@@ -78,6 +78,8 @@ class AuthService:
             session.flush()
             # tạo token
             token = self._jwt.generate(user.id,user.username)
+            # commit lại đê lưu database thật
+            session.commit()
             return{
                 "token":token,
                 "user":self._serialize(user),
@@ -113,13 +115,17 @@ class AuthService:
     def get_user(self,user_id:int)->dict:
             session = self.get_session()  
             # tìm kiếm user trong db tương đương với SELECT * FROM users WHERE id = ? LIMIT 1
-            user = session.query(User).filter(User.id == int(user_id)).first()
-            # nếu không tìm thấy user nhả lỗi
-            if not user:
-                raise LookupError("không tìm thấy user")
-            # trả thông tin user
-            return self._serialize(user,full = True)
+            try:
+                user = session.query(User).filter(User.id == int(user_id)).first()
+                # nếu không tìm thấy user nhả lỗi
+                if not user:
+                    raise LookupError("không tìm thấy user")
+                # trả thông tin user
+                return self._serialize(user,full = True)
     # decorator biến hàm thành phương thức tĩnh + không dùng self, thuần logic k, không thuộc tính object
+            finally:
+                session.close()
+
     @staticmethod
     # kiểm tra thông tin đăng ký
     def _validate_register(username:str,email:str,password:str)->None:
@@ -140,10 +146,10 @@ class AuthService:
     def _assert_unique(session:Session,username:str,email:str)->None:
         # nếu tìm thấy user thì nhả lỗi
         if session.query(User).filter(User.username == username).first():
-            raise LookupError("__conflict__username__")
+            raise ValueError("__conflict__username__")
         # nếu tìm thấy email thì nhả lỗi
         if session.query(User).filter(User.email == email).first():
-            raise LookupError("__conflict__email__")
+            raise ValueError("__conflict__email__")
     @staticmethod
     # hàm chuyển đổi object user thành dict
     def _serialize(user:User,full:bool=False)->dict:
@@ -204,7 +210,7 @@ class AuthBlueprint:
                 # kết quả
                 result = self._svc.register(username, email, password)
                 # thành công mã 200
-                return jsonify({"status": "ok", "message": "Đăng nhập thành công", **result}), 200
+                return jsonify({"status": "ok", "message": "Đăng ký thành công", **result}), 200
             except ValueError as e:
                 # lỗi 400 client gửi request sai nên server không nhận
                 return jsonify({"status": "error", "message": str(e)}), 400
