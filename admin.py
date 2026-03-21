@@ -155,9 +155,9 @@ class AdminService:
 class AdminBlueprint:
     def __init__(self,admin_service:AdminService|None=None,jwt_service =None,url_prefix:str="/admin"):
         # import muộn tránh circular tránh cho cả hai file import lẫn nhau
-        from auth import JWTService
+        from auth import _jwt_service as shared_jwt
         self._svc = admin_service or AdminService()
-        self._jwt = jwt_service or JWTService()
+        self._jwt = jwt_service or shared_jwt
         self.blueprint = Blueprint("admin",__name__,url_prefix = url_prefix)
         self._register_routes()
     # Middleware: phải login VÀ phải là admin

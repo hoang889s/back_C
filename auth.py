@@ -17,7 +17,7 @@ class JWTConfig:
     # kiểu mã hóa 
     ALGORITHM = "HS256"
     # thời gian tới hạn
-    EXPIRES_MIN = int(os.getenv("JWT_EXPIRES_MIN", 60 * 24))   
+    EXPIRES_MIN = int(os.getenv("JWT_EXPIRES_MIN", 60 * 24*7))   
 #  JWT Service – thuần logic, không phụ thuộc Flask
 class JWTService:
     # hàm khởi tạo
@@ -29,7 +29,7 @@ class JWTService:
         now = datetime.utcnow()
         # payload nơi chứa dữ liệu của jwt token nó có dạng HEADER.PAYLOAD.SIGNATURE
         payload={
-            "sub":user_id,
+            "sub":str(user_id),
             "username":username,
             "iat":now,
             "exp":now + timedelta(minutes=self.cfg.EXPIRES_MIN), 
@@ -41,10 +41,13 @@ class JWTService:
     def decode(self,token:str)->dict | None:
         try:
             # xác thực và giải mã jwt
+            print(f"[JWT DECODE] dùng SECRET = '{self.cfg.SECRET}'")
             return jwt.decode(token,self.cfg.SECRET,algorithms=[self.cfg.ALGORITHM])
         except jwt.ExpiredSignatureError:
+            print("[JWT] hết hạn")
             return None
-        except jwt.InvalidTokenError:
+        except jwt.InvalidTokenError as e:
+            print(f"[JWT] không hợp lệ: {e}")
             return None
 # Auth Service – business logic (register/login)
 class AuthService:
@@ -110,7 +113,7 @@ class AuthService:
     def get_user(self,user_id:int)->dict:
             session = self.get_session()  
             # tìm kiếm user trong db tương đương với SELECT * FROM users WHERE id = ? LIMIT 1
-            user = session.query(User).filter(User.id == user_id).first()
+            user = session.query(User).filter(User.id == int(user_id)).first()
             # nếu không tìm thấy user nhả lỗi
             if not user:
                 raise LookupError("không tìm thấy user")
@@ -145,7 +148,7 @@ class AuthService:
     # hàm chuyển đổi object user thành dict
     def _serialize(user:User,full:bool=False)->dict:
         # tạo user cơ bản tránh attribute error
-        base = {"id": user.id, "username": user.username, "email": user.email}
+        base = {"id": user.id, "username": user.username, "email": user.email,"role": user.role.value,}
         # nếu full đúng thì trả thêm dữ liệu hasattr kiểm tra object có thuộc tính này không
         if full and hasattr(user,"created_at"):
             # thêm created_at vào base

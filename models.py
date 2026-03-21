@@ -18,6 +18,7 @@ class GameResult(str,enum.Enum):
     LOSS = "loss"
     DRAW = "draw"
     ONGOING = "ongoing"
+_by_value = lambda x: [e.value for e in x]
 # bảng user
 class User(Base):
     __tablename__ ="users"
@@ -25,7 +26,7 @@ class User(Base):
     username = Column(String(50),unique=True,nullable=False,index=True)
     email = Column(String(120),unique=True,nullable=False,index=True)
     password_hash = Column(String(255),nullable=False)
-    role = Column(SAEnum(UserRole), default=UserRole.USER, nullable=False)
+    role = Column(SAEnum(UserRole,values_callable=_by_value), default=UserRole.USER, nullable=False)
     created_at = Column(DATETIME2, server_default=func.now())
     games_as_white = relationship(
         "GameHistory",foreign_keys = "GameHistory.white_player_id",back_populates = "white_player"
@@ -42,7 +43,7 @@ class GameHistory(Base):
     # null = AI
     white_player_id = Column(Integer,ForeignKey("users.id"),nullable=True)
     black_player_id = Column(Integer,ForeignKey("users.id"),nullable=True)
-    result = Column(SAEnum(GameResult),default = GameResult.ONGOING,nullable=False)
+    result = Column(SAEnum(GameResult, values_callable=_by_value), default=GameResult.ONGOING, nullable=False)
     pgn_moves = Column(Text,nullable=True)
     total_moves = Column(Integer,default=0)
     started_at = Column(DateTime(timezone=True),server_default=func.now())
