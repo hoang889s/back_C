@@ -5,6 +5,7 @@ from minimax import Minimax
 from constants import WHITE, BLACK
 from typing import Optional
 from admin import admin_bp 
+from room_routes import room_bp
 import logging
 #  Import mới cho Auth + DB 
 from database import init_db
@@ -210,7 +211,8 @@ class ChessApp:
     def _setup_routes(self):
         #  Auth routes (/auth/register, /auth/login, /auth/me, /auth/logout) 
         self.app.register_blueprint(auth_bp)
-        self.app.register_blueprint(admin_bp) 
+        self.app.register_blueprint(admin_bp)
+        self.app.register_blueprint(room_bp)
         game   = GameManager(ai_depth=self.config.AI_DEPTH, ai_color=self.config.AI_COLOR)
         routes = GameRoutes(game)
 

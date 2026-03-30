@@ -44,6 +44,6 @@ def get_db():
         db.close()
 def init_db():
     # import để Base biết về các model
-    from models import User, GameHistory   
+    from models import User, GameHistory,Room
     Base.metadata.create_all(bind=engine)
     print("[DB] Đã khởi tạo schema thành công.")
