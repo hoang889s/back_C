@@ -169,6 +169,7 @@ class AuthBlueprint:
         self.blueprint = Blueprint("auth",__name__,url_prefix=url_prefix)
         self._register_routes()
     # kiểm tra token trước khi chạy api
+    """
     def login_required(self,f):
         # bảo vệ giữ hàm gốc
         @wraps(f)
@@ -181,16 +182,56 @@ class AuthBlueprint:
             if not header.startswith("Bearer "):
                 # nhả lỗi 401 Unauthorized có thể là lỗi token sai 
                 return jsonify({"status": "error", "message": "Thiếu token xác thực"}), 401
+            
             # bỏ phần đâu lấy phần sau đó
+            #payload = self._jwt.decode(header[7:])
+            #if not payload:
+                # lỗi 401 token không hợp lệ hoặc hết hạn
+                #return jsonify({"status": "error", "message": "Token không hợp lệ hoặc hết hạn"}),401
+            # lưu user vào request
+            #request.current_user = payload
+            # gọi api thật
+            #return f(*args, **kwargs)
             payload = self._jwt.decode(header[7:])
             if not payload:
                 # lỗi 401 token không hợp lệ hoặc hết hạn
                 return jsonify({"status": "error", "message": "Token không hợp lệ hoặc hết hạn"}),401
-            # lưu user vào request
-            request.current_user = payload
+            session = SessionLocal()
+            try:
+                current_user = session.query(User).filter(User.id == payload["sub"]).first()
+            finally:
+                session.close()
+            if not current_user:
+                return jsonify({"status": "error", "message": "User không tồn tại"}), 401
+            request.current_user = current_user
             # gọi api thật
-            return f(*args, **kwargs)
+            return f(*args, current_user=current_user,**kwargs)
         return decorrated
+    """
+    def login_required(self, f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            header = request.headers.get("Authorization", "")
+            if not header.startswith("Bearer "):
+                return jsonify({"status": "error", "message": "Thiếu token xác thực"}), 401
+            payload = self._jwt.decode(header[7:])
+            if not payload:
+                return jsonify({"status": "error", "message": "Token không hợp lệ hoặc hết hạn"}), 401
+            session = SessionLocal()
+            try:
+                current_user = session.query(User).filter(User.id == payload["sub"]).first()
+            finally:
+                session.close()
+            if not current_user:
+                return jsonify({"status": "error", "message": "User không tồn tại"}), 401
+            print("USER:", current_user.id)
+            print("METHOD:", request.method)
+            request.current_user = current_user
+            return f(*args, **kwargs)
+        # Đặt tên unique dựa trên qualified name của function gốc
+        #decorated.__name__ = f.__qualname__.replace(".", "_")
+        return decorated
+
     # hàm routes đăng ký
     def _register_routes(self):
         # group các routes /api/register
@@ -248,7 +289,8 @@ class AuthBlueprint:
         def me():
             try:
                 # lấy thông tin
-                user = self._svc.get_user(request.current_user["sub"])
+                #user = self._svc.get_user(request.current_user["sub"])
+                user = request.current_user
                 # thành công
                 return jsonify({"status": "ok", "user": user}), 200
             except LookupError as e:
@@ -269,6 +311,7 @@ _auth_blueprint = AuthBlueprint(
 # Export để app.py import
 auth_bp       = _auth_blueprint.blueprint
 login_required = _auth_blueprint.login_required
+#auth_bp = AuthBlueprint(auth_service=_auth_service,jwt_service=_jwt_service,).blueprint
 
 
 

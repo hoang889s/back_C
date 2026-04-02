@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from board import Board
 from minimax import Minimax
@@ -10,6 +10,9 @@ import logging
 #  Import mới cho Auth + DB 
 from database import init_db
 from auth import auth_bp, login_required
+
+ALLOWED_ORIGIN = "http://localhost:5173"
+
 class Config:
     HOST = "127.0.0.1"
     PORT = 8000
@@ -199,7 +202,31 @@ class ChessApp:
         self.logger = logging.getLogger(self.__class__.__name__)
     # cài cors cho phép bên khác gọi
     def _setup_cors(self):
-        CORS(self.app)
+        # dùng before_request để bắt OPTIONS trước khi Flask routing xử lý.
+        # flask-cors không đủ mạnh khi blueprint được import sẵn ở global scope,
+        # nên tự xử lý thủ công để đảm bảo mọi route đều nhận được preflight đúng.
+        
+        @self.app.before_request
+        def handle_preflight():
+            if request.method == "OPTIONS":
+                res = make_response()
+                res.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
+                res.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+                res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+                res.headers["Access-Control-Allow-Credentials"] = "true"
+                res.headers["Access-Control-Max-Age"] = "3600"
+                return res, 204
+        # Gắn CORS headers vào tất cả response thông thường
+        @self.app.after_request
+        def add_cors_headers(response):
+            response.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            return response
+        
+        #CORS(self.app, supports_credentials=True)
+
+
+
     def _setup_db(self):
         # Tạo bảng khi khởi động (bỏ qua nếu đã tồn tại)
         try:

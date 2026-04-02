@@ -26,16 +26,25 @@ class RoomHelper:
     # chuyển sang json
     @staticmethod
     def to_json(room:Room)->dict:
+
+        try:
+            host_username = room.host.username if room.host else None
+        except:
+            host_username = None
+        try:
+            guest_username = room.guest.username if room.guest else None
+        except Exception:
+            guest_username = None
         return{
             "id": room.id,
             "code": room.code,
-            "mode": room.mode,
-            "status": room.status,
+            "mode": room.mode.value if room.mode else None,
+            "status": room.status.value if room.status else None,
             "host_color": room.host_color,
             "has_password": room.password_hash is not None,
             "time_limit": room.time_limit,
-            "host": {"id": room.host_id, "username": room.host.username} if room.host else None,
-            "guest": {"id": room.guest_id, "username": room.guest.username} if room.guest else None,
+            "host": {"id": room.host_id, "username": host_username} if room.host_id else None,
+            "guest": {"id": room.guest_id, "username":  guest_username} if room.guest_id else None,
             "game_id": room.game_id,
             "created_at": room.created_at.isoformat() if room.created_at else None,
             "started_at": room.started_at.isoformat() if room.started_at else None,
@@ -49,6 +58,18 @@ class RoomManager:
     # mở db
     def _get_db(self):
         return SessionLocal()
+    #  helper eager-load host và guest trong session
+    @staticmethod
+    def _eager_load(room:Room):
+        #Truy cập host/guest trong session để SQLAlchemy cache lại, tránh DetachedInstanceError.
+        try:
+             _ = room.host
+        except Exception:
+            pass
+        try:
+             _ = room.guest
+        except Exception:
+            pass
     # tạo 
     def create(self,host_id:int,mode:str = "pvp",host_color:str="white",password:Optional[str]=None,time_limit:Optional[str]=None,)->Room:
         # mở db
@@ -70,11 +91,13 @@ class RoomManager:
                 time_limit = time_limit, 
             )
             # thêm 
-            db.add()
+            db.add(room)
             # thêm cứng vào database 
             db.commit()
             # tải lại
-            db.refresh()
+            db.refresh(room)
+            # eager-load trước khi đóng session
+            self._eager_load(room)
             # ghi log thông báo ở terminal server
             self.logger.info(f"[Room] Tạo phòng {room.code} bởi user {host_id}")
             return room
@@ -86,7 +109,11 @@ class RoomManager:
         db = self._get_db()
         try:
             # trả về kết quả đầu tiên tìm được hoặc None nếu không tìm thấy
-            return db.query(Room).filter_by(code=code.upper()).first()
+            #return db.query(Room).filter_by(code=code.upper()).first()
+            room = db.query(Room).filter_by(code=code.upper()).first()
+            if room:
+                self._eager_load(room)
+                return room
         finally:
             db.close()
     # Danh sách phòng công khai
@@ -100,8 +127,13 @@ class RoomManager:
             if mode in ("pvp","pva"):
                 # truy vấn theo mode
                 q = q.filter(Room.mode == RoomMode(mode))
+            rooms = q.order_by(Room.created_at.desc()).limit(limit).all()
+            # eager-load tất cả rooms trước khi đóng session
+            for r in rooms:
+                self._eager_load(r)
+            return rooms
             # trả về toàn dữ liệu truy vấn được với giơi hạn limit săp xếp tăng dần theo ngày tạo
-            return q.order_by(Room.created_at.desc()).limit(limit).all()
+            #return q.order_by(Room.created_at.desc()).limit(limit).all()
         finally:
             db.close()
     # phòng của một user
@@ -109,13 +141,16 @@ class RoomManager:
         # mở db
         db = self._get_db()
         try:
-            # trả về thông tin truy vấn dựa trên guest_id host_id phải trùng khớp với user_id và thực hiện sắp xếp tăng dần dựa trên ngày tạo
-            return (
-                db.query(Room).filter((Room.host_id==user_id)|(Room.guest_id == user_id))
+            rooms = (
+                db.query(Room)
+                .filter((Room.host_id == user_id) | (Room.guest_id == user_id))
                 .order_by(Room.created_at.desc())
                 .limit(limit)
                 .all()
             )
+            for r in rooms:
+                self._eager_load(r)
+            return rooms
         finally:
             db.close()
     # tham gia phòng sử tuple để không sửa được dữ liệu
@@ -146,7 +181,7 @@ class RoomManager:
                 black_player_id = guest_id if room.host_color == "white" else room.host_id,
             )
             # lưu tạm chưa db
-            db.add()
+            db.add(game)
             # có thể roll back để sửa một vài thông tin
             db.flush()
             room.guest_id = guest_id
@@ -157,6 +192,8 @@ class RoomManager:
             db.commit()
             # tải lại
             db.refresh(room)
+            #  eager-load trước khi đóng session
+            self._eager_load(room)
             # ghi log để thông báo terminal
             self.logger.info(f"[Room] User {guest_id} vào phòng {room.code}")
             return room,None
@@ -227,6 +264,8 @@ class RoomManager:
             db.commit()
             # tải lải bảng room
             db.refresh(room)
+            # eager-load trước khi đóng session
+            self._eager_load(room)
             # ghi log
             self.logger.info(f"[Room] Phòng {room.code} kết thúc, kết quả: {result}")
             return room,None
@@ -239,8 +278,9 @@ class RoomRoutes:
         self.manager = manager
         self.logger  = logging.getLogger(self.__class__.__name__)
     # Post /rooms/create
-    @login_required
-    def create_room(self, current_user):
+    #@login_required
+    def create_room(self):
+        current_user = request.current_user
         # dữ liệu tạo phòng không báo lối khi exept slient
         data = request.get_json(silent=True) or {}
         mode = data.get("mode","pvp")
@@ -259,11 +299,14 @@ class RoomRoutes:
             password = password,
             time_limit = int(time_limit) if time_limit else None,
         )
+        
+        print("DATA:",data)
         # 201 tạo thành công
         return jsonify({"status": "ok", "room": RoomHelper.to_json(room)}), 201
     # POST /rooms/join
-    @login_required
-    def join_room(self,current_user):
+    #@login_required
+    def join_room(self):
+        current_user = request.current_user
         # dữ liệu tạo phòng không báo lối khi exept slient
         data = request.get_json(silent=True) or {}
         code = data.get("code","").strip()
@@ -282,8 +325,9 @@ class RoomRoutes:
         # thành công
         return jsonify({"status": "ok", "room": RoomHelper.to_json(room)}), 200
     # GET /rooms/
-    @login_required
-    def list_rooms(self,current_user):
+    #@login_required
+    def list_rooms(self):
+        request.current_user
         # lấy status, mode
         status_filter = request.args.get("status", "waiting")
         mode_filter = request.args.get("mode")
@@ -296,15 +340,17 @@ class RoomRoutes:
         # thành công
         return jsonify({"status": "ok", "rooms": [RoomHelper.to_json(r) for r in rooms]}), 200
     # GET /rooms/my
-    @login_required
-    def my_rooms(self,current_user):
+    #@login_required
+    def my_rooms(self):
+        current_user = request.current_user
         # lấy list_public
         rooms = self.manager.list_by_user(current_user.id)
         # thành công
         return jsonify({"status": "ok", "rooms": [RoomHelper.to_json(r) for r in rooms]}), 200
     # GET /rooms/<code>
-    @login_required
-    def get_room(self,current_user,code):
+    #@login_required
+    def get_room(self,code):
+        request.current_user
         # lấy phòng bằng mã
         room = self.manager.get_by_code(code)
         if not room:
@@ -313,8 +359,9 @@ class RoomRoutes:
         # thành công
         return jsonify({"status": "ok", "room": RoomHelper.to_json(room)}), 200
     # POST /rooms/<code>/leave
-    @login_required
-    def leave_room(self,current_user,code):
+    #@login_required
+    def leave_room(self,code):
+        current_user = request.current_user
         ok,message = self.manager.leave(code, current_user.id)
         # nếu không ok
         if not ok:
@@ -324,11 +371,12 @@ class RoomRoutes:
         # thành công
         return jsonify({"status": "ok", "message": message}), 200
     # POST /rooms/<code>/end
-    @login_required
-    def end_room(self,current_user,code):
+    #@login_required
+    def end_room(self,code):
+        current_user = request.current_user
         data = request.get_json(silent=True) or {}
         result = data.get("result","draw")
-        if result in ("win","loss","draw"):
+        if result not in ("win","loss","draw"):
             # bad request 400
             return jsonify({"status": "error", "message": "result phải là 'win', 'loss' hoặc 'draw'"}), 400
         # tận dụng được tuple
@@ -348,19 +396,43 @@ class RoomBlueprint:
         self.routes = RoomRoutes(self.manager)
         self.blueprint = Blueprint("room", __name__, url_prefix="/rooms")
         self._register()
+    #def _register(self):
+        #add = self.blueprint.add_url_rule
+        #r = self.routes
+        #url - endpoint - viewfunc - methos
+        #add("/","list_rooms",login_required(r.list_rooms),["GET"])
+        #add("/create","create_room",login_required(r.create_room),["POST","OPTIONS"])
+        #add("/join","join_room",login_required(r.join_room),["POST","OPTIONS"])
+        #add("/my","my_rooms",login_required(r.my_rooms),["GET"])
+        #add("/<code>","get_room",login_required(r.get_room),["GET"])
+        #add("/<code>/leave","leave_room",login_required(r.leave_room),["POST","OPTIONS"])
+        #add("/<code>/end","end_room",login_required(r.end_room),["POST","OPTIONS"])
     def _register(self):
+        import functools
         add = self.blueprint.add_url_rule
         r = self.routes
-        # url - endpoint - viewfunc - methos
-        add("/","list_rooms",r.list_rooms,["GET"])
-        add("/create","creae_room",r.create_room,["POST"])
-        add("/join","join_room",r.join_room,["POST"])
-        add("/my","my_rooms",r.my_rooms,["GET"])
-        add("/<code>","get_room",r.get_room,["GET"])
-        add("/<code>/leave","leave_room",r.leave_room,["POST"])
-        add("/<code>/end","end_room",r.end_room,["POST"])
+        def wrap(fn):
+            #Wrap login_required nhưng giữ __name__ unique theo tên hàm gốc.
+            wrapped = login_required(fn)
+            # Flask dùng cái này làm endpoint
+            #print(login_required(r.join_room).__name__)
+            wrapped.__name__ = fn.__name__
+            return wrapped
+        add("/","list_rooms",wrap(r.list_rooms),methods=["GET"])
+        add("/create","create_room",wrap(r.create_room),methods=["POST","OPTIONS"])
+        #print(wrap(r.join_room))
+        add("/join","join_room",wrap(r.join_room),methods=["POST","OPTIONS"])
+        add("/my","my_rooms",wrap(r.my_rooms),methods=["GET"])
+        add("/<code>","get_room",wrap(r.get_room),methods=["GET"])
+        add("/<code>/leave","leave_room",wrap(r.leave_room),methods=["POST","OPTIONS"])
+        add("/<code>/end","end_room",wrap(r.end_room),methods=["POST","OPTIONS"])
+        
+
+        
+        
 # Instance dùng để đăng ký vào app.py
 room_bp = RoomBlueprint().blueprint
+
 
 
         
