@@ -28,72 +28,29 @@ class User(Base):
     password_hash = Column(String(255),nullable=False)
     role = Column(SAEnum(UserRole,values_callable=_by_value), default=UserRole.USER, nullable=False)
     created_at = Column(DATETIME2, server_default=func.now())
-    games_as_white = relationship(
-        "GameHistory",foreign_keys = "GameHistory.white_player_id",back_populates = "white_player"
-    )
-    games_as_black = relationship(
-        "GameHistory",foreign_keys = "GameHistory.black_player_id",back_populates = "black_player" 
-    )
     def __repr__(self):
         return f"<User id={self.id} username={self.username}>"
-# bảng GameHistory lưu kết quả mỗi ván đấu
-class GameHistory(Base):
-    __tablename__ = "game_history"
-    id = Column(Integer,primary_key = True,index = True)
-    # null = AI
-    white_player_id = Column(Integer,ForeignKey("users.id"),nullable=True)
-    black_player_id = Column(Integer,ForeignKey("users.id"),nullable=True)
-    result = Column(SAEnum(GameResult, values_callable=_by_value), default=GameResult.ONGOING, nullable=False)
-    pgn_moves = Column(Text,nullable=True)
-    total_moves = Column(Integer,default=0)
-    started_at = Column(DateTime(timezone=True),server_default=func.now())
-    ended_at = Column(DateTime(timezone=True), nullable=True)
-    white_player = relationship("User",foreign_keys = [white_player_id],back_populates = "games_as_white")
-    black_player = relationship("User",foreign_keys = [black_player_id],back_populates = "games_as_black")
-    def __repr__(self):
-        return f"<GameHistory id ={self.id} result ={self.result}>"
-# phần room
-# trạng thái phòng
-class RoomStatus(str, enum.Enum):
-    # chờ
-    WAITING = "waiting"
-    # đang đấu
-    PLAYING = "playing"
-    # kết thúc
-    FINISHED = "finished"
-    # bị bỏ
-    ABANDONED = "abandoned"
-# chế độ phòng
-class RoomMode(str, enum.Enum):
-    # người với người
-    PVP = "pvp"
-    # người với máy
-    PVA = "pva"
-# bảng dữ liệu room
-
 class Room(Base):
     __tablename__ = "rooms"
-    id = Column(Integer,primary_key=True,index = True)
-    # được trùng nhau về mã phòng
-    code = Column(String(8),unique=True,nullable=False,index=True)
-    host_id = Column(Integer,ForeignKey("users.id"),nullable=False)
-    guest_id = Column(Integer,ForeignKey("users.id"),nullable=True)
-    # nó sẽ lưu pvp thay PVP
-    mode = Column(SAEnum(RoomMode,values_callable=_by_value),default=RoomMode.PVP,nullable=False)
-    status = Column(SAEnum(RoomStatus,values_callable=_by_value),default=RoomStatus.WAITING,nullable=False)
-    # white|black
-    host_color = Column(String(5),default="white",nullable=False)
-    password_hash = Column(String(255),nullable=True)
-    # giới hình thời gian
-    time_limit = Column(Integer,nullable=True)
-    game_id = Column(Integer,ForeignKey("game_history.id"),nullable=True)
-    created_at = Column(DateTime(timezone=True),server_default=func.now())
-    started_at = Column(DateTime(timezone=True),nullable=True)
-    ended_at = Column(DateTime(timezone=True),nullable=True)
-    # quan hệ
-    host = relationship("User",foreign_keys = [host_id])
-    guest = relationship("User",foreign_keys=[guest_id])
-    game = relationship("GameHistory", foreign_keys=[game_id])
-
-    def __repr__(self):
-        return f"<Room code={self.code} status={self.status}>"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    code = Column(String(20), unique=True, nullable=False, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    is_private = Column(Integer, default=0)
+    password_hash = Column(String(255), nullable=True)
+    status = Column(String(20), default="waiting")
+    created_at = Column(DATETIME2, server_default=func.now())
+    # relationship
+    owner = relationship("User")
+    players = relationship("RoomPlayer", back_populates="room", cascade="all, delete")
+class RoomPlayer(Base):
+    __tablename__ = "room_players"
+    id = Column(Integer, primary_key=True)
+    room_id = Column(Integer, ForeignKey("rooms.id", ondelete="CASCADE"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    role = Column(String(20), default="player")
+    joined_at = Column(DATETIME2, server_default=func.now())
+    # relationship
+    room = relationship("Room", back_populates="players")
+    user = relationship("User")
+    

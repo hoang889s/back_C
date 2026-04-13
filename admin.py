@@ -175,6 +175,11 @@ class AdminBlueprint:
             if not payload:
                 return jsonify({"status": "error", "message": "Token không hợp lệ hoặc hết hạn"}), 401
             # kiểm tra quyền admin trong DB (không tin tuyệt đối vào payload)
+            # --- DEBUG TẠM ---
+            print(">>> payload đầy đủ:", payload)
+            print(">>> payload['sub'] :", payload.get("sub"), type(payload.get("sub")))
+            # --- HẾT DEBUG ---
+
             from database import SessionLocal
             # bắt đầu phiên mới
             session = SessionLocal()

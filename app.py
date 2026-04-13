@@ -5,7 +5,8 @@ from minimax import Minimax
 from constants import WHITE, BLACK
 from typing import Optional
 from admin import admin_bp 
-from room_routes import room_bp
+from routes.room import bp as room_bp
+
 import logging
 #  Import mới cho Auth + DB 
 from database import init_db

@@ -4,7 +4,7 @@ import os
 from functools import wraps
 
 import jwt
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify,g
 from sqlalchemy.orm import Session
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -219,14 +219,15 @@ class AuthBlueprint:
                 return jsonify({"status": "error", "message": "Token không hợp lệ hoặc hết hạn"}), 401
             session = SessionLocal()
             try:
-                current_user = session.query(User).filter(User.id == payload["sub"]).first()
+                current_user = session.query(User).filter(User.id == int(payload["sub"])).first()
             finally:
                 session.close()
             if not current_user:
                 return jsonify({"status": "error", "message": "User không tồn tại"}), 401
             print("USER:", current_user.id)
             print("METHOD:", request.method)
-            request.current_user = current_user
+            #request.current_user = current_user
+            g.user = current_user
             return f(*args, **kwargs)
         # Đặt tên unique dựa trên qualified name của function gốc
         #decorated.__name__ = f.__qualname__.replace(".", "_")
@@ -290,7 +291,7 @@ class AuthBlueprint:
             try:
                 # lấy thông tin
                 #user = self._svc.get_user(request.current_user["sub"])
-                user = request.current_user
+                user=self._svc._serialize(request.current_user, full=True)
                 # thành công
                 return jsonify({"status": "ok", "user": user}), 200
             except LookupError as e:
