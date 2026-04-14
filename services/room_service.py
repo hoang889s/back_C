@@ -10,7 +10,9 @@ class RoomService:
             name = data["name"],
             code = secrets.token_hex(4),
             owner_id = user.id,
-            is_private = data.get("is_private",False),
+            is_private =1 if  data.get("is_private",False) else 0,
+            mode = data.get("mode","human"),
+            time_limit=int(data.get("time_limit", 600)),
             password_hash=self._hash_pw(data.get("password"))
         )
         self.db.add(room)
