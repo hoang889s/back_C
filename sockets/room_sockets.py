@@ -1,6 +1,6 @@
 from flask_socketio import join_room, leave_room, emit,SocketIO
 from flask import request
-from storage.room_manager import Room,room_manager
+from manager.room_manager import Room,room_manager
 from constants import WHITE, BLACK
 #from app import socketio
 from extensions import socketio

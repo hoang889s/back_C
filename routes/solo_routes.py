@@ -1,25 +1,29 @@
 from flask import Blueprint, request, jsonify
-from constants import WHITE, BLACK, EMPTY
-from services.game_store import GameStore
+from store.solo_store import SoloStore
+from constants import WHITE,BLACK
 bp = Blueprint("solo", __name__)
-store = GameStore()
-def get_user_game():
-    user_id = request.headers.get("X-User-Id", "guest")
-    return store.get_game(user_id)
+store = SoloStore()
+def get_user_id():
+    uid = request.headers.get("X-User-Id")
+    if not uid:
+        uid = f"guest-{request.remote_addr}"
+    return uid
+# lấy game
+def get_game():
+    return store.get_or_create(get_user_id())
+# load bảng
 @bp.route("/board", methods=["GET"])
 def get_board():
-    game = get_user_game()
-
+    game = get_game()
     color = game.board.turn
-    status = game.get_game_status(color)
     return jsonify({
         "board": game.get_board_state(),
-        "turn": "white" if color == WHITE else "black",
-        "game_status":status,
+        "turn": "white" if color == WHITE else "black"
     })
+# nước đi hợp lệ legalmove
 @bp.route("/legal-moves", methods=["GET"])
 def legal_moves():
-    game = get_user_game()
+    game = get_game()
     try:
         row = int(request.args.get("row", -1))
         col = int(request.args.get("col", -1))
@@ -28,12 +32,11 @@ def legal_moves():
     if not (0 <= row < 8 and 0 <= col < 8):
         return jsonify({"error": "row/col ngoài phạm vi"}), 400
     moves = game.get_legal_moves_for(row, col)
-    return jsonify({
-        "moves":moves
-    })
+    return jsonify({"moves": moves})
+# người chơi đánh
 @bp.route("/move", methods=["POST"])
 def move():
-    game = get_user_game()
+    game = get_game()
     data = request.get_json(silent=True) or {}
     try:
         from_sq = data["from"]
@@ -44,30 +47,40 @@ def move():
         )
     except Exception:
         return jsonify({"error": "Dữ liệu không hợp lệ"}), 400
+    # người chơi đánh
     success = game.apply_player_move(move)
     if not success:
         return jsonify({
             "status": "invalid",
             "board": game.get_board_state()
+
         }),422
     ai_move = None
-    if game.board.turn == game.ai_color:
-        ai_move = game.compute_ai_move()
+    # Ai move
+    try:
+        if game.board.turn == game.ai_color:
+            ai_move = game.compute_ai_move()
+    except Exception as e:
+        return jsonify({"error": f"AI error: {str(e)}"}), 500
     color = game.board.turn
-    status = game.get_game_status(color)
     return jsonify({
         "status": "ok",
         "board": game.get_board_state(),
         "turn": "white" if color == WHITE else "black",
-        "game_status": status,
         "ai_move": ai_move
+
     })
+# reset game
 @bp.route("/reset", methods=["POST"])
 def reset():
-    game = get_user_game()
-    game.reset()
+    user_id = get_user_id()
+    store.reset(user_id)
+    game = store.get_or_create(user_id)
     return jsonify({
         "board": game.get_board_state(),
-        "turn": "white",
-        "game_status": {"state": "ongoing"}
+        "turn": "white"
     })
+# debug
+@bp.route("/debug", methods=["GET"])
+def debug():
+    return jsonify(store.stats())

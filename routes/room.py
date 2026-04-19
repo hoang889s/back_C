@@ -5,9 +5,8 @@ from services.room_service import RoomService
 
 bp = Blueprint("rooms", __name__)
 
-# =========================
 # TẠO PHÒNG
-# =========================
+
 @bp.route("/rooms", methods=["POST"])
 @login_required
 def create_room():
@@ -40,9 +39,7 @@ def create_room():
         db.close()
 
 
-# =========================
 # VÀO PHÒNG
-# =========================
 @bp.route("/rooms/join", methods=["POST"])
 @login_required
 def join_room():

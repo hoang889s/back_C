@@ -1,6 +1,6 @@
 import logging
-from board import Board
-from minimax import Minimax
+from core.board import Board
+from core.minimax import Minimax
 from constants import WHITE,BLACK
 class GameManager:
     def __init__(self, ai_depth=4, ai_color=BLACK):
