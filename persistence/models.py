@@ -7,7 +7,7 @@ from sqlalchemy.dialects.mssql import DATETIME2
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
-from database import Base
+from persistence.database import Base
 # phân quyền
 class UserRole(str,enum.Enum):
     ADMIN = "admin"

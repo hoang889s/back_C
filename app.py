@@ -1,14 +1,15 @@
 from flask import Flask
 from config import Config
-from database import init_db
+from persistence.database import init_db
 from extensions import socketio
 
 # blueprints
-from auth import auth_bp
+from api.auth import auth_bp
 from admin import admin_bp
-from routes.room import bp as room_bp
-from routes.solo_routes import bp as solo_bp
+from api.routes import game_bp
 
+
+from api import sockets
 from flask_cors import CORS
 
 import logging
@@ -34,8 +35,7 @@ def create_app(config=Config):
         print("[DB ERROR]", e)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
-    app.register_blueprint(room_bp)
-    app.register_blueprint(solo_bp)
+    app.register_blueprint(game_bp)
     return app
 if __name__ == "__main__":
     app = create_app()
@@ -45,3 +45,5 @@ if __name__ == "__main__":
         port=Config.PORT,
         debug=Config.DEBUG
     )
+    import sys
+    print("lỗi ở đây",sys.path)

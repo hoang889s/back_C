@@ -163,7 +163,7 @@ class AuthService:
 # Auth Blueprint – chỉ lo HTTP layer , tiến vào api
 class AuthBlueprint:
     # khởi tạo
-    def __init__(self,auth_service:AuthService|None=None,jwt_service:JWTService|None = None,url_prefix:str="/auth"):
+    def __init__(self,auth_service:AuthService|None=None,jwt_service:JWTService|None = None,url_prefix:str="/api/auth"):
         self._svc = auth_service or AuthService()
         self._jwt = jwt_service or JWTService()
         self.blueprint = Blueprint("auth",__name__,url_prefix=url_prefix)
@@ -313,20 +313,3 @@ _auth_blueprint = AuthBlueprint(
 auth_bp       = _auth_blueprint.blueprint
 login_required = _auth_blueprint.login_required
 #auth_bp = AuthBlueprint(auth_service=_auth_service,jwt_service=_jwt_service,).blueprint
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-

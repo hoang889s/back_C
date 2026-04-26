@@ -1,2 +1,7 @@
 from flask_socketio import SocketIO
-socketio = SocketIO(cors_allowed_origins="*")
+
+# SocketIO instance dùng chung toàn app
+socketio = SocketIO(
+    cors_allowed_origins="*",
+    async_mode="threading"  # an toàn, không cần eventlet/gevent
+)

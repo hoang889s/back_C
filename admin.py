@@ -1,8 +1,8 @@
 from functools import wraps
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash
-from database import SessionLocal
-from models import User, UserRole
+from persistence.database import SessionLocal
+from persistence.models import User, UserRole
 
 class AdminService:
     # ket noi database
@@ -180,7 +180,7 @@ class AdminBlueprint:
             print(">>> payload['sub'] :", payload.get("sub"), type(payload.get("sub")))
             # --- HẾT DEBUG ---
 
-            from database import SessionLocal
+            from persistence.database import SessionLocal
             # bắt đầu phiên mới
             session = SessionLocal()
             try:

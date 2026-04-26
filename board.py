@@ -1,5 +1,5 @@
 # khu vực bàn cờ
-from constants import WHITE, BLACK, EMPTY
+from core.constants import WHITE, BLACK, EMPTY
 import random
 # Sinh bảng số ngẫu nhiên 64-bit một lần duy nhất khi khởi động
 # Mỗi (quân, hàng, cột) → một số ngẫu nhiên duy nhất

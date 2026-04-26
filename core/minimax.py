@@ -1,4 +1,4 @@
-from constants import WHITE, BLACK, EMPTY
+from core.constants import WHITE, BLACK, EMPTY
 # bảng đánh giá thưởng phạt của quân tốt, mã , xe ,vua,hậu
 PAWN_TABLE = [
     [ 0,  0,  0,  0,  0,  0,  0,  0],
