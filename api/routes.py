@@ -1,182 +1,161 @@
 from flask import Blueprint, request, jsonify, g
 from api.auth import login_required
-from extensions import socketio
-#from sockets import socketio  # để emit realtime
 
 from persistence.database import SessionLocal
+from persistence.repository.roomrepository import RoomRepository
+from persistence.repository.roomplayerrepository import RoomPlayerRepository
+
 from services.game_manager import GameManager
 from services.analyzer import Analyzer
-def get_services():
-    db = SessionLocal()
-    gm = GameManager(db)
-    analyzer = Analyzer(depth=4)
-    return db, gm, analyzer
+# =============================
+# HELPER
+# =============================
+def get_db():
+    return SessionLocal()
+# =============================
+# ROUTES
+# =============================
 class GameRoutes:
     def __init__(self):
-        self.bp = Blueprint("game", __name__, url_prefix="/game")
+        self.bp = Blueprint("game", __name__, url_prefix="/api/game")
         self._register_routes()
-
     def _register_routes(self):
         bp = self.bp
-
         # =============================
-        # CREATE GAME
+        # CREATE ROOM (REST ONLY)
         # =============================
-        @bp.route("/create", methods=["POST"])
+        @bp.route("/rooms", methods=["POST"])
         @login_required
-        def create_game():
-            db, gm, _ = get_services()
+        def create_room():
+            db = get_db()
             try:
-                data = request.get_json(silent=True) or {}
-                room_code = data.get("room_code")
-
-                game = gm.create_game(room_code)
-
-                socketio.emit("game_created", {
-                    "game_id": game.id
-                }, room=room_code)
+                room_repo = RoomRepository(db)
+                rp_repo = RoomPlayerRepository(db)
+                data = request.get_json() or {}
+                room = room_repo.create_room(
+                    owner_id=g.user.id,
+                    name=data.get("name", "Chess Room"),
+                    mode=data.get("mode", "human"),
+                )
+                rp_repo.add_player(room.id, g.user.id)
+                return jsonify({
+                    "status": "ok",
+                    "room": {
+                        "code": room.code,
+                        "name": room.name,
+                        "mode": room.mode
+                    }
+                }),201
+            except Exception as e:
+                return jsonify({"error": str(e)}), 400
+            finally:
+                db.close()
+        # =============================
+        # LIST ROOMS
+        # =============================
+        @bp.route("/rooms", methods=["GET"])
+        @login_required
+        def list_rooms():
+            db = get_db()
+            try:
+                room_repo = RoomRepository(db)
+                rooms = room_repo.get_all()
 
                 return jsonify({
                     "status": "ok",
-                    "game_id": game.id,
-                }), 200
-
-            except Exception as e:
-                return jsonify({
-                    "status": "error",
-                    "message": str(e)
-                }), 400
+                    "rooms": [
+                        {
+                            "code": r.code,
+                            "name": r.name,
+                            "mode": r.mode
+                        } for r in rooms
+                    ]
+                })
 
             finally:
                 db.close()
+        # =============================
+        # ROOM DETAIL
+        # =============================
+        @bp.route("/rooms/<room_code>", methods=["GET"])
+        @login_required
+        def get_room(room_code):
+            db = get_db()
+            try:
+                room_repo = RoomRepository(db)
+                rp_repo = RoomPlayerRepository(db)
 
+                room = room_repo.get_by_code(room_code)
+                if not room:
+                    return jsonify({"error": "Room not found"}), 404
+
+                players = rp_repo.get_players(room.id)
+
+                return jsonify({
+                    "status": "ok",
+                    "room": {
+                        "code": room.code,
+                        "name": room.name,
+                        "mode": room.mode,
+                        "players": [p.username for p in players]
+                    }
+                })
+
+            finally:
+                db.close()
         # =============================
-        # LOAD GAME
+        # LOAD GAME STATE (READ ONLY)
         # =============================
-        @bp.route("/<int:game_id>", methods=["GET"])
+        @bp.route("/games/<int:game_id>", methods=["GET"])
         @login_required
         def load_game(game_id):
-            db, gm, _ = get_services()
+            db = get_db()
             try:
-                game = gm.load_game(game_id)
+                gm = GameManager(db)
+                game = gm.game_repo.get_game(game_id)
+
+                if not game:
+                    return jsonify({"error": "Game not found"}), 404
 
                 return jsonify({
                     "status": "ok",
-                    "board": game["board"].board,
-                    "turn": game["turn"]
-                }), 200
-
-            except Exception as e:
-                return jsonify({
-                    "status": "error",
-                    "message": str(e)
-                }), 404
+                    "game": {
+                        "id": game.id,
+                        "fen": game.fen,
+                        "turn": game.turn.value,
+                        "status": game.status.value,
+                        "white": game.white_player_id,
+                        "black": game.black_player_id
+                    }
+                })
 
             finally:
                 db.close()
-
         # =============================
-        # MOVE
+        # GAME HISTORY
         # =============================
-        @bp.route("/<int:game_id>/move", methods=["POST"])
+        @bp.route("/games/<int:game_id>/moves", methods=["GET"])
         @login_required
-        def make_move(game_id):
-            db, gm, _ = get_services()
+        def get_moves(game_id):
+            db = get_db()
             try:
-                data = request.get_json(silent=True) or {}
-                move = data.get("move")
-
-                result = gm.make_move(
-                    game_id=game_id,
-                    move_str=move,
-                    player_id=g.user.id
-                )
-
-                game = gm.load_game(game_id)
-                room_id = game.get("room_id")
-
-                socketio.emit("move_made", {
-                    "move": move,
-                    "board": result["board"],
-                    "turn": result["turn"],
-                    "check": result["is_check"],
-                    "checkmate": result["is_checkmate"]
-                }, room=room_id)
+                gm = GameManager(db)
+                moves = gm.game_repo.get_moves(game_id)
 
                 return jsonify({
                     "status": "ok",
-                    **result
-                }), 200
-
-            except Exception as e:
-                return jsonify({
-                    "status": "error",
-                    "message": str(e)
-                }), 400
-
-            finally:
-                db.close()
-
-        # =============================
-        # AI MOVE
-        # =============================
-        @bp.route("/<int:game_id>/ai", methods=["POST"])
-        @login_required
-        def ai_move(game_id):
-            db, gm, analyzer = get_services()
-            try:
-                result = gm.ai_move(
-                    game_id=game_id,
-                    analyzer=analyzer
-                )
-
-                game = gm.load_game(game_id)
-                room_id = game.get("room_id")
-
-                socketio.emit("ai_move", result, room=room_id)
-
-                return jsonify({
-                    "status": "ok",
-                    **result
-                }), 200
-
-            except Exception as e:
-                return jsonify({
-                    "status": "error",
-                    "message": str(e)
-                }), 400
+                    "moves": [
+                        {
+                            "move": m.move,
+                            "player": m.player_id
+                        } for m in moves
+                    ]
+                })
 
             finally:
                 db.close()
-
-        # =============================
-        # ANALYZE
-        # =============================
-        @bp.route("/<int:game_id>/analyze", methods=["GET"])
-        @login_required
-        def analyze(game_id):
-            db, gm, analyzer = get_services()
-            try:
-                game = gm.load_game(game_id)
-                board = game["board"]
-
-                result = analyzer.analyze(board, board.turn)
-
-                return jsonify({
-                    "status": "ok",
-                    **result
-                }), 200
-
-            except Exception as e:
-                return jsonify({
-                    "status": "error",
-                    "message": str(e)
-                }), 400
-
-            finally:
-                db.close()
-
-
-# export blueprint
+# =============================
+# EXPORT
+# =============================
 _game_routes = GameRoutes()
 game_bp = _game_routes.bp

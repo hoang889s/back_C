@@ -35,49 +35,52 @@ class GameManager:
             "room_id": room.id
         }
         return game
+
+
+    # tải game từ database ok
     def load_game(self,game_id):
         if game_id in self.games:
             return self.games[game_id]
-        else:
-            game_model = self.game_repo.get_game(game_id)
-            if not game_model:
-                raise Exception("Game not found")
-            board = Board()
-
-            # replay moves từ DB
-            moves = self.db.query(Move).filter(Move.game_id == game_id).order_by(Move.move_number).all()
-            for mv in moves:
-                parsed = self._parse_move(mv.move)
-                board.make_move(parsed)
-            game = {
-                "board": board,
-                "turn": board.turn,
-                "room_id": game_model.room_id
-            }
-            self.games[game_id] = game
-        room_id  = game["room_id"] 
-        room_players = self.room_player_repo.get_players(room_id)
-        players = [p.user_id for p in room_players]
-        game["players"] = players
+        game_model = self.game_repo.get_game(game_id)
+        if not game_model:
+            raise Exception("Game not found")
+        board = Board()
+        moves = (
+            self.db.query(Move)
+            .filter(Move.game_id == game_id)
+            .order_by(Move.move_number)
+            .all()
+        )
+        for mv in moves:
+            parsed = self._parse_move(mv.move)
+            board.make_move(parsed)
+        game = {
+            "board": board,
+            "turn": board.turn,
+            "room_id": game_model.room_id
+        }
+        # cache lại
+        self.games[game_id] = game
+        # load players
+        room_players = self.room_player_repo.get_players(game_model.room_id)
+        game["players"] = [p.user_id for p in room_players]
         return game
-    # di chuyển
+
+    # di chuyển ok
     def make_move(self, game_id, move_str, player_id):
         game = self.load_game(game_id)
         board = game["board"]
         move = self._parse_move(move_str)
+        # validate turn
+        if player_id not in game.get("players", []):
+            raise Exception("Player not in game")
+        # validate move
         legal_moves = board.generate_all_legal_moves(board.turn)
         if move not in legal_moves:
-             raise Exception("Invalid move")
+            raise Exception("Invalid move")
         board.make_move(move)
-        move_number = len(board.move_history)
-        self.game_repo.add_move(
-            game_id=game_id,
-            move=move_str,
-            player_id=player_id,
-            move_number=move_number
-        )
         return {
-            "board": board.board,
+            "move": move_str,
             "turn": board.turn,
             "is_check": board.is_in_check(board.turn),
             "is_checkmate": board.is_checkmate(board.turn),
@@ -90,13 +93,13 @@ class GameManager:
         move_str = result["best_move"]
         move = self._parse_move(move_str)
         board.make_move(move)
-        self.game_repo.add_move(
-            game_id=game_id,
-            move=move_str,
-            player_id=None,
-            move_number=len(board.move_history)
-        )
-        return result
+        return {
+            **result,
+            "move": move_str,
+            "turn": board.turn,
+            "is_check": board.is_in_check(board.turn),
+            "is_checkmate": board.is_checkmate(board.turn),
+        }
     def _parse_move(self, move_str):
         def to_index(sq):
             col = ord(sq[0]) - ord('a')

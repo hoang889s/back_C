@@ -1,8 +1,9 @@
 #from sqlalchemy import Nullable
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text,
-    ForeignKey, Enum as SAEnum
+    ForeignKey, Enum as SAEnum,Boolean,UniqueConstraint
 )
+
 from sqlalchemy.dialects.mssql import DATETIME2
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -21,6 +22,15 @@ class GameResult(str,enum.Enum):
     LOSS = "loss"
     DRAW = "draw"
     ONGOING = "ongoing"
+class RoomStatus(str,enum.Enum):
+    WAITING = "waiting"
+    PLAYING = "playing"
+    FINISHED = "finished"
+class Turn(str,enum.Enum):
+
+    WHITE = "white"
+    BLACK = "black"
+
 _by_value = lambda x: [e.value for e in x]
 # bảng user
 class User(Base):
@@ -35,16 +45,22 @@ class User(Base):
     games_as_black = relationship("Game", foreign_keys="Game.black_player_id")
     def __repr__(self):
         return f"<User id={self.id} username={self.username}>"
+# Room
 class Room(Base):
     __tablename__ = "rooms"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     code = Column(String(20), unique=True, nullable=False, index=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    is_private = Column(Integer, default=0)
+    is_private = Column(Boolean, default=False)
     password_hash = Column(String(255), nullable=True)
-    status = Column(String(20), default="waiting")
+    status = Column(
+        SAEnum(RoomStatus, values_callable=_by_value),
+        default=RoomStatus.WAITING,
+        nullable=False,
+    )
     created_at = Column(DATETIME2, server_default=func.now())
+
     mode = Column(SAEnum(GameMode, values_callable=_by_value),nullable=False)
     time_limit = Column(Integer, default=600)
     # relationship
@@ -54,9 +70,18 @@ class Room(Base):
 class RoomPlayer(Base):
     __tablename__ = "room_players"
     id = Column(Integer, primary_key=True)
-    room_id = Column(Integer, ForeignKey("rooms.id", ondelete="CASCADE"))
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    room_id = Column(
+        Integer, 
+        ForeignKey("rooms.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     role = Column(String(20), default="player")
+
     joined_at = Column(DATETIME2, server_default=func.now())
     # relationship
     room = relationship("Room", back_populates="players")
@@ -64,15 +89,47 @@ class RoomPlayer(Base):
 class Game(Base):
     __tablename__ = "games"
     id = Column(Integer, primary_key=True)
-    room_id = Column(Integer, ForeignKey("rooms.id", ondelete="CASCADE"))
-    white_player_id = Column(Integer, ForeignKey("users.id"))
-    black_player_id = Column(Integer, ForeignKey("users.id"),nullable=True)
-    fen = Column(Text, default="startpos")  # trạng thái bàn cờ
-    turn = Column(String(10), default="white")
-    status = Column(SAEnum(GameResult,values_callable=_by_value), default=GameResult.ONGOING)
+    room_id = Column(
+        Integer, 
+        ForeignKey("rooms.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    white_player_id = Column(
+        Integer, 
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    black_player_id = Column(
+        Integer, 
+        ForeignKey("users.id"),
+        nullable=True
+    )
+    fen = Column(Text, default="startpos")
+    # trạng thái bàn cờ
+    turn = Column(
+        SAEnum(Turn, values_callable=_by_value),
+        default=Turn.WHITE,
+        nullable=False
+    )
+    status = Column(
+        SAEnum(GameResult,values_callable=_by_value), 
+        default=GameResult.ONGOING,
+        nullable=False
+    )
+
     created_at = Column(DATETIME2, server_default=func.now())
-    white_player = relationship("User", foreign_keys=[white_player_id],overlaps="games_as_white")
-    black_player = relationship("User", foreign_keys=[black_player_id],overlaps="games_as_black")  
+
+    white_player = relationship(
+        "User", 
+        foreign_keys=[white_player_id],
+        overlaps="games_as_white"
+    )
+    black_player = relationship(
+        "User", 
+        foreign_keys=[black_player_id],
+        overlaps="games_as_black"
+    )  
     # relationship
     room = relationship("Room",back_populates= "game")
     moves = relationship(
@@ -90,7 +147,11 @@ class Move(Base):
         nullable=False
     )
     move = Column(String(20), nullable=False)  # e2e4, Nf3
-    player_id = Column(Integer, ForeignKey("users.id"))  # ai đánh nước này
+    player_id = Column(
+        Integer, 
+        ForeignKey("users.id"),
+        nullable=False
+    )  # ai đánh nước này
     move_number = Column(Integer)  # số thứ tự nước đi
     created_at = Column(DATETIME2, server_default=func.now())
     # relationship
