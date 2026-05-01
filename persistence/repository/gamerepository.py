@@ -18,6 +18,9 @@ class GameRepository(BaseRepository):
     # get game ok
     def get_game(self, game_id):
         return self.db.query(Game).filter(Game.id == game_id).first()
+    # get by room id
+    def get_by_room_id(self, room_id):
+        return self.db.query(Game).filter(Game.room_id == room_id).first()
     # add move ok
     def add_move(self, game_id, move_str, player_id, move_number):
         game = self.get_game(game_id)

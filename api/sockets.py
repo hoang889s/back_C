@@ -46,7 +46,7 @@ def to_chess_notation(row, col):
 
 
 # =============================
-# AUTH SOCKET  ok
+# AUTH SOCKET  ok u
 # =============================
 def get_current_user():
     user_id = session.get("user_id")
@@ -61,7 +61,7 @@ def get_current_user():
 
 
 # =============================
-# CONNECT ok
+# CONNECT ok u
 # =============================
 @socketio.on("connect")
 def handle_connect(auth):
@@ -78,7 +78,7 @@ def handle_connect(auth):
 
 
 # =============================
-# JOIN GAME ok f
+# JOIN GAME ok f u
 # =============================
 @socketio.on("join_game")
 def handle_join_game(data):
@@ -100,10 +100,11 @@ def handle_join_game(data):
         if not game.black_player_id and user.id != game.white_player_id:
             gm.game_repo.assign_black_player(game_id, user.id)
         board = fen_to_board(game.fen)
-        room = f"game_{game_id}"
-        join_room(room)
+        game_room = f"game_{game_id}"
+        join_room(game_room)
         socketio.emit("game_state", {
             "gameId": game.id,
+            "room_code": game.room.code if game.room else None,
             "white": game.white_player_id,
             "black": game.black_player_id,
             "turn": game.turn.value,
@@ -111,13 +112,13 @@ def handle_join_game(data):
             "fen":game.fen,
             "board": serialize_board(board)
         },
-        room=room)
+        room=game_room)
 
     finally:
         db.close()
 
 # =============================
-# JOIN ROOM ok f
+# JOIN ROOM ok f u
 # =============================
 @socketio.on("join_room")
 def handle_join(data):
@@ -132,7 +133,7 @@ def handle_join(data):
         return
     #join_room(room_code)
     #db = SessionLocal()
-    db, room_repo, rp_repo, _, _ = get_repos()
+    db, room_repo, rp_repo, gm, _ = get_repos()
     try:
         #room_repo = RoomRepository(db)
         #rp_repo = RoomPlayerRepository(db)
@@ -149,14 +150,33 @@ def handle_join(data):
             rp_repo.add_player(room.id, user.id)
 
         join_room(room_code)
-        emit("joined", {
+        emit("room_joined", {
             "user": user.username,
-            "room": room_code
+            "room_code": room_code
 
         })
         socketio.emit("user_joined", {
             "user": user.username
         },room=room_code, include_self=False)
+        players_count = rp_repo.count_players(room.id)
+        if players_count == 2:
+            game = gm.game_repo.get_by_room_id(room.id)
+            if not game:
+                players = db.query(RoomPlayer).filter(RoomPlayer.room_id == room.id).all()
+                white_id = players[0].user_id
+                black_id = players[1].user_id
+                game = gm.game_repo.create_game(
+                    room_id=room.id,
+                    white_id=white_id,
+                    black_id=black_id,
+                )
+            board = fen_to_board(game.fen)
+            game_room = f"game_{game.id}"
+            join_room(game_room)
+            socketio.emit("game_created", {
+                "game_id": game.id,
+            },room=room_code)
+
         print(f"[SOCKET] {user.username} joined room {room_code}")
     finally:
         db.close()
