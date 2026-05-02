@@ -1,5 +1,6 @@
 from persistence.models import Game, Move,Turn,GameResult
 from persistence.repository.baserepository import BaseRepository
+from core.utils.fen import get_start_fen
 class GameRepository(BaseRepository):
     # tao game ok
     def create_game(self, room_id, white_id, black_id=None):
@@ -9,7 +10,7 @@ class GameRepository(BaseRepository):
             black_player_id=black_id,
             turn=Turn.WHITE,
             status=GameResult.ONGOING,
-            fen="startpos"
+            fen=get_start_fen()
         )
         self.add(game)
         self.commit()

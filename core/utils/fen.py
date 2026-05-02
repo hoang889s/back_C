@@ -3,6 +3,9 @@
 from core.constants import WHITE, BLACK, EMPTY
 from core.board import Board
 START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1"
+def get_start_fen() -> str:
+    """Trả về FEN đầu game (không phải 'startpos')"""
+    return START_FEN
 def normalize_fen(fen: str) -> str:
     # handle special keyword
     if fen == "startpos":
