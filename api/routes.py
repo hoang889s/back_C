@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g,session
 from api.auth import login_required
 
 from persistence.database import SessionLocal
@@ -21,6 +21,23 @@ class GameRoutes:
         self._register_routes()
     def _register_routes(self):
         bp = self.bp
+        # =============================
+        # LOGOUT
+        # =============================
+        @bp.route("/logout", methods=["POST"])
+        @login_required
+        def logout():
+            try:
+                session.clear()
+                return jsonify({
+                    "status": "ok",
+                    "message": "Logged out successfully"
+
+                }),200
+            except Exception as e:
+                return jsonify({
+                    "error": str(e)
+                }),400
         # =============================
         # CREATE ROOM (REST ONLY)
         # =============================

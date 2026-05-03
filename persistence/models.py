@@ -33,6 +33,9 @@ class RoomStatus(str, enum.Enum):
 class Turn(str, enum.Enum):
     WHITE = "white"
     BLACK = "black"
+class ColorChoice(str, enum.Enum):
+    WHITE = "white"
+    BLACK = "black"
 
 _by_value = lambda x: [e.value for e in x]
 
@@ -79,7 +82,11 @@ class Room(Base):
     code = Column(String(20), unique=True, nullable=False, index=True)
 
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-
+    owner_color = Column(
+        SAEnum(ColorChoice),
+        nullable=True,
+        comment="Color chosen by room owner"
+    )
     is_private = Column(Boolean, default=False)
     password_hash = Column(String(255), nullable=True)
 

@@ -13,6 +13,7 @@ from services.analyzer import Analyzer
 
 from core.utils.fen import fen_to_board, board_to_fen
 from api.auth import _jwt_service
+from datetime import datetime
 
 # =============================
 # Helper: Services factory
@@ -46,12 +47,29 @@ def to_chess_notation(row, col):
 # =============================
 def get_current_user():
     user_id = session.get("user_id")
+    print(f"[AUTH] get_current_user - session user_id: {user_id}")
+
     if not user_id:
+        print(f"[AUTH] No user_id in session")
         return None
+
+    token_exp = session.get("token_exp")
+    if token_exp and datetime.fromtimestamp(token_exp) < datetime.now():
+        print(f"[AUTH] Token expired for user {user_id}")
+        session.clear()
+        return None
+    
 
     db = get_db()
     try:
-        return db.query(User).filter(User.id == user_id).first()
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            print(f"[AUTH] Found user: {user.username} (ID: {user.id})")
+        else:
+            print(f"[AUTH] User {user_id} not found in database")
+            session.clear()
+
+        return user
     finally:
         db.close()
 
@@ -69,48 +87,113 @@ def handle_connect(auth):
     if not payload:
         print("[SOCKET] Invalid token")
         return False
+
+    exp_time = payload.get("exp")
+    if exp_time and datetime.fromtimestamp(exp_time) < datetime.now():
+        print("[SOCKET] Token expired")
+        return False
+    
+    user_id = int(payload["sub"])
+    username = payload.get("username")
+    print(f"[SOCKET] Before set session - user_id: {session.get('user_id')}")
+
     
     session["user_id"] = int(payload["sub"])
-    print(f"[SOCKET] Connected user: {payload['username']} (ID: {payload['sub']})")
+    session["token_exp"] = exp_time
+    print(f"[SOCKET] After set session - user_id: {session.get('user_id')}, username: {username}")
+    print(f"[SOCKET] Connected user: {username} (ID: {user_id})")
     return True
 
+# =============================
+# DISCONNECT 
+# =============================
+@socketio.on("disconnect")
+def handle_disconnect():
+    user = get_current_user()
+    if user:
+        session.clear()
+        print(f"[SOCKET] {user.username} disconnected, session cleared")
+    else:
+        print("[SOCKET] Unknown user disconnected")
+# =============================
+# LOGOUT 
+# =============================
+@socketio.on("logout")
+def handle_logout():
+    user = get_current_user()
+    if user:
+        session.clear()  
+        print(f"[SOCKET] {user.username} logged out")
+        emit("logout_success", {"message": "Logged out"})
+    else:
+        emit("logout_failed", {"message": "User not authenticated"})
 # =============================
 # CREATE ROOM
 # =============================
 @socketio.on("create_room")
 def handle_create_room(data=None):
     data = data or {}
+    print(f"[SOCKET] create_room called with data: {data}")
+    print(f"[SOCKET] Session user_id: {session.get('user_id')}")
     user = get_current_user()
-    
-    if not user:
+    if user:
+        print(f"[SOCKET]  get_current_user returned: {user.username} (ID: {user.id})")
+    else:
+        print(f"[SOCKET]  get_current_user returned: None")
         emit("error", {"message": "Unauthorized"})
         return
     
     db, room_repo, rp_repo, _, _ = get_repos()
     try:
+        chosen_color = data.get("color","white").lower()
+        print(f"[SOCKET] Chosen color: {chosen_color}")
+
+        if chosen_color not in ["white", "black"]:
+            emit("error", {"message": "Color must be 'white' or 'black'"})
+            return
+        
+        print(f"[SOCKET] Creating room with owner_id: {user.id}, owner_username: {user.username}")
+
         room = room_repo.create_room(
             owner_id=user.id,
             name=data.get("name", "Chess Room"),
             mode=data.get("mode", "human"),
         )
+
+        print(f"[SOCKET] Room created in DB: code={room.code}, id={room.id}, owner_id={room.owner_id}")
+        room.owner_color = chosen_color
+
+        print(f"[SOCKET] Adding player {user.username} (ID: {user.id}) to room {room.code}")
         # Add creator to room
         rp_repo.add_player(room.id, user.id)
+        print(f"[SOCKET] Before commit - room.owner_id: {room.owner_id}, user.id: {user.id}")
         db.commit()  # ✅ Commit ngay sau khi tạo room
+
+        print(f"[SOCKET] After commit - room persisted to DB")
         
         # Join socket room
         join_room(room.code)
         
-        print(f"[SOCKET] Room created: {room.code} by {user.username}")
+        print(f"[SOCKET] About to emit room_created:")
+        print(f"  - room_code: {room.code}")
+        print(f"  - user_id: {user.id}")
+        print(f"  - username: {user.username}")
+        print(f"  - owner_color: {chosen_color}")
         emit("room_created", {
             "room_code": room.code,
             "user_id": user.id,
-            "username": user.username
+            "username": user.username,
+            "owner_color": chosen_color,
         })
+        print(f"[SOCKET] ✅ Room created successfully: {room.code} by {user.username}")
     except Exception as e:
         print(f"[SOCKET ERROR] create_room: {str(e)}")
+        import traceback
+        traceback.print_exc()
         emit("error", {"message": str(e)})
     finally:
         db.close()
+        print(f"[SOCKET] create_room - DB connection closed")
 
 # =============================
 # JOIN ROOM - ✅ FIXED VERSION
@@ -138,6 +221,11 @@ def handle_join_room(data):
             emit("error", {"message": "Room not found"})
             return
 
+        if not hasattr(room, 'owner_color') or not room.owner_color:
+            emit("error", {"message": "Room owner must select color first"})
+            return
+        
+
         # Check current player count
         player_count = rp_repo.count_players(room.id)
         if player_count >= 2:
@@ -163,8 +251,18 @@ def handle_join_room(data):
         if updated_count == 2:
             print(f"[SOCKET] Room {room_code} now has 2 players, creating game...")
             
+            # ✅ FIX 4: Lock the room again before checking/creating game to prevent race condition
+            room = db.query(Room).filter(
+                Room.id == room.id
+            ).with_for_update().first()
+            
+            # Check if game already exists (another connection might have created it)
             existing_game = gm.game_repo.get_by_room_id(room.id)
-            if not existing_game:
+            if existing_game:
+                print(f"[DEBUG] Game already exists: {existing_game.id}")
+                game = existing_game
+                game_id = game.id
+            else:
                 # Get players in order
                 players = db.query(RoomPlayer).filter(
                     RoomPlayer.room_id == room.id
@@ -177,15 +275,26 @@ def handle_join_room(data):
                     emit("error", {"message": "Player count mismatch"})
                     return
                 
-                white_id = players[0].user_id
-                black_id = players[1].user_id
+                owner = db.query(User).filter(User.id == room.owner_id).first()
+                owner_player = db.query(RoomPlayer).filter(
+                    RoomPlayer.room_id == room.id,
+                    RoomPlayer.user_id == room.owner_id
+                ).first()
+                if room.owner_color == "white":
+                    white_id = room.owner_id
+                    black_id = players[0].user_id if players[0].user_id != room.owner_id else players[1].user_id
+                else:
+                    black_id = room.owner_id
+                    white_id = players[0].user_id if players[0].user_id != room.owner_id else players[1].user_id
+                print(f"[SOCKET] Creating game: white={white_id}, black={black_id} (owner chose {room.owner_color})")
                 
                 print(f"[SOCKET] Creating game: white={white_id}, black={black_id}")
                 
+                # ✅ FIX 5: Create game with BOTH players assigned (not just white)
                 game = gm.game_repo.create_game(
                     room_id=room.id,
                     white_id=white_id,
-                    black_id=black_id,
+                    black_id=black_id,  # ✅ Assign black immediately!
                 )
                 
                 print(f"[DEBUG] Game created: {game.id}, white={game.white_player_id}, black={game.black_player_id}")
@@ -197,11 +306,6 @@ def handle_join_room(data):
                 print(f"[DEBUG] Updated Room: game_id={game.id}, player_count=2")
                 
                 game_id = game.id
-                
-            else:
-                game = existing_game
-                game_id = game.id
-                print(f"[DEBUG] Using existing game: {game.id}")
 
             board = fen_to_board(game.fen)
             game_room = f"game_{game.id}"
@@ -235,7 +339,7 @@ def handle_join_room(data):
             "user": user.username,
             "room_code": room_code,
             "user_id": user.id,
-            "game_id": game_id
+            "game_id": game_id,
         })
         
         # Notify others
@@ -253,7 +357,7 @@ def handle_join_room(data):
         db.close()
 
 # =============================
-# JOIN GAME (direct join via game ID)
+# JOIN GAME (direct join via game ID) - ✅ FIXED
 # =============================
 @socketio.on("join_game")
 def handle_join_game(data):
@@ -269,7 +373,11 @@ def handle_join_game(data):
             emit("game_error", {"message": "Game ID required"})
             return
 
-        game = gm.game_repo.get_game(game_id)
+        # ✅ FIX 6: Lock the game row to prevent race condition
+        game = db.query(Game).filter(
+            Game.id == game_id
+        ).with_for_update().first()
+        
         if not game:
             emit("game_error", {"message": "Game not found"})
             return
@@ -277,11 +385,27 @@ def handle_join_game(data):
         print(f"[SOCKET] {user.username} joining game {game_id}")
         print(f"[SOCKET] Game state before: white={game.white_player_id}, black={game.black_player_id}")
 
-        # Assign black player if not already assigned and user is not white
-        if not game.black_player_id and user.id != game.white_player_id:
+        # ✅ FIX 7: Only assign black if:
+        # 1. Black is not already assigned
+        # 2. User is not the white player
+        # 3. User is not already the black player
+        if (not game.black_player_id and 
+            user.id != game.white_player_id):
             print(f"[SOCKET] Assigning {user.username} as black player")
-            gm.game_repo.assign_black_player(game_id, user.id)
-            game = gm.game_repo.get_game(game_id)
+            game.black_player_id = user.id
+            db.commit()
+            print(f"[SOCKET] Black player assigned: {user.id}")
+        elif game.black_player_id == user.id:
+            print(f"[SOCKET] User is already black player")
+        elif user.id == game.white_player_id:
+            print(f"[SOCKET] User is white player")
+        else:
+            print(f"[SOCKET ERROR] User cannot join: black already assigned to {game.black_player_id}")
+            emit("game_error", {"message": "Black player already assigned"})
+            return
+
+        # ✅ FIX 8: Re-fetch game after potential update
+        game = db.query(Game).filter(Game.id == game_id).first()
 
         print(f"[SOCKET] Game state after: white={game.white_player_id}, black={game.black_player_id}")
 
