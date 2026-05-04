@@ -332,6 +332,7 @@ def handle_join_room(data):
                 "board": serialize_board(board)
             }, room=game_room)
         else:
+            print(f"[DEBUG] status : {game.status.value}")
             print(f"[DEBUG] Only {updated_count} player(s), waiting for second player...")
 
         # Send room_joined with game_id
@@ -426,7 +427,7 @@ def handle_join_game(data):
             "fen": game.fen,
             "board": serialize_board(board)
         }, room=game_room)
-
+        print (f"[SOCKET] Emit game_state with status : {game.status.value}")
         print(f"[SOCKET] Emitted game_state with white={game.white_player_id}, black={game.black_player_id}")
 
     except Exception as e:
@@ -504,6 +505,12 @@ def handle_move(data):
 
         print(f"[SOCKET] Processing move {move_str} for game {game_id}")
 
+        # ✅ DEBUG: Log game state TRƯỚC make_move
+        game_before = gm.game_repo.get_game(game_id)
+        print(f"[DEBUG] BEFORE make_move:")
+        print(f"  - FEN: {game_before.fen}")
+        print(f"  - Turn: {game_before.turn.value}")
+
         # Make the move
         result = gm.make_move(
             game_id=game_id,
@@ -511,14 +518,40 @@ def handle_move(data):
             player_id=user.id
         )
         
-        # Record move in database
-        gm.game_repo.add_move(game_id, move_str, user.id)
-        db.commit()  # ✅ Commit ngay
+        print(f"[DEBUG] make_move result: {result}")
+        
+        # ✅ DEBUG: Log game state SAU make_move nhưng TRƯỚC commit
+        game_after_make = gm.game_repo.get_game(game_id)
+        print(f"[DEBUG] AFTER make_move (before commit):")
+        print(f"  - FEN: {game_after_make.fen}")
+        print(f"  - Turn: {game_after_make.turn.value}")
+        
+        # ✅ COMMIT ngay
+        db.commit()
+        
+        # ✅ DEBUG: Log game state SAU commit
+        game_after_commit = gm.game_repo.get_game(game_id)
+        print(f"[DEBUG] AFTER commit:")
+        print(f"  - FEN: {game_after_commit.fen}")
+        print(f"  - Turn: {game_after_commit.turn.value}")
+        
+        # Get move_number
+        moves = db.query(Move).filter(Move.game_id == game_id).all()
+        move_number = len(moves) + 1
+        
+        # Record move in database with move_number
+        gm.game_repo.add_move(game_id, move_str, user.id, move_number)
+        db.commit()
         
         # Get updated game state
         game = gm.game_repo.get_game(game_id)
         board = fen_to_board(game.fen)
-
+        
+        print(f"[SOCKET] Broadcasting:")
+        print(f"  - FEN: {game.fen}")
+        print(f"  - Turn: {game.turn.value}")
+        print(f"  - Board: {serialize_board(board)}")
+        
         # Broadcast move to all players in game
         socketio.emit("move", {
             "move": move_str,
@@ -534,6 +567,8 @@ def handle_move(data):
 
     except Exception as e:
         print(f"[SOCKET ERROR] move: {str(e)}")
+        import traceback
+        traceback.print_exc()
         emit("error", {"message": str(e)})
     finally:
         db.close()
