@@ -196,7 +196,7 @@ def handle_create_room(data=None):
         print(f"[SOCKET] create_room - DB connection closed")
 
 # =============================
-# JOIN ROOM - ✅ FIXED VERSION
+# JOIN ROOM 
 # =============================
 @socketio.on("join_room")
 def handle_join_room(data):
@@ -212,10 +212,10 @@ def handle_join_room(data):
 
     db, room_repo, rp_repo, gm, _ = get_repos()
     try:
-        # ✅ FIX 1: Lock the room row with FOR UPDATE to prevent race condition
+        #  Lock the room row with FOR UPDATE to prevent race condition
         room = db.query(Room).filter(
             Room.code == room_code
-        ).with_for_update().first()  # 🔒 LOCK the row!
+        ).with_for_update().first()  # LOCK the row!
         
         if not room:
             emit("error", {"message": "Room not found"})
@@ -236,13 +236,13 @@ def handle_join_room(data):
         if not rp_repo.is_in_room(room.id, user.id):
             rp_repo.add_player(room.id, user.id)
             print(f"[DEBUG] Added {user.username} to room {room_code}")
-            db.commit()  # ✅ FIX 2: COMMIT immediately so other connections see the change
+            db.commit()
         
         # Join socket room
         join_room(room_code)
         print(f"[SOCKET] {user.username} joined room {room_code}")
 
-        # ✅ FIX 3: Recount after commit to get accurate count
+        
         updated_count = rp_repo.count_players(room.id)
         print(f"[DEBUG] Room {room_code} now has {updated_count} players")
         
@@ -251,7 +251,7 @@ def handle_join_room(data):
         if updated_count == 2:
             print(f"[SOCKET] Room {room_code} now has 2 players, creating game...")
             
-            # ✅ FIX 4: Lock the room again before checking/creating game to prevent race condition
+            
             room = db.query(Room).filter(
                 Room.id == room.id
             ).with_for_update().first()
@@ -290,11 +290,11 @@ def handle_join_room(data):
                 
                 print(f"[SOCKET] Creating game: white={white_id}, black={black_id}")
                 
-                # ✅ FIX 5: Create game with BOTH players assigned (not just white)
+                #  Create game with BOTH players assigned (not just white)
                 game = gm.game_repo.create_game(
                     room_id=room.id,
                     white_id=white_id,
-                    black_id=black_id,  # ✅ Assign black immediately!
+                    black_id=black_id,  
                 )
                 
                 print(f"[DEBUG] Game created: {game.id}, white={game.white_player_id}, black={game.black_player_id}")
@@ -316,7 +316,7 @@ def handle_join_room(data):
             socketio.emit("game_created", {
                 "game_id": game.id,
                 "room_code": room_code
-            }, room=room_code)
+            },to=room_code)
 
             # Broadcast game_state to all in game room
             print(f"[SOCKET] Broadcasting game_state: white={game.white_player_id}, black={game.black_player_id}")
@@ -330,9 +330,9 @@ def handle_join_room(data):
                 "status": game.status.value,
                 "fen": game.fen,
                 "board": serialize_board(board)
-            }, room=game_room)
+            }, to=game_room)
         else:
-            print(f"[DEBUG] status : {game.status.value}")
+            
             print(f"[DEBUG] Only {updated_count} player(s), waiting for second player...")
 
         # Send room_joined with game_id
@@ -347,7 +347,7 @@ def handle_join_room(data):
         socketio.emit("user_joined", {
             "user": user.username,
             "user_id": user.id
-        }, room=room_code, include_self=False)
+        }, to=room_code, include_self=False)
 
     except Exception as e:
         print(f"[SOCKET ERROR] join_room: {str(e)}")
@@ -358,7 +358,7 @@ def handle_join_room(data):
         db.close()
 
 # =============================
-# JOIN GAME (direct join via game ID) - ✅ FIXED
+# JOIN GAME (direct join via game ID) 
 # =============================
 @socketio.on("join_game")
 def handle_join_game(data):
@@ -374,7 +374,7 @@ def handle_join_game(data):
             emit("game_error", {"message": "Game ID required"})
             return
 
-        # ✅ FIX 6: Lock the game row to prevent race condition
+        
         game = db.query(Game).filter(
             Game.id == game_id
         ).with_for_update().first()
@@ -386,7 +386,7 @@ def handle_join_game(data):
         print(f"[SOCKET] {user.username} joining game {game_id}")
         print(f"[SOCKET] Game state before: white={game.white_player_id}, black={game.black_player_id}")
 
-        # ✅ FIX 7: Only assign black if:
+       
         # 1. Black is not already assigned
         # 2. User is not the white player
         # 3. User is not already the black player
@@ -405,7 +405,7 @@ def handle_join_game(data):
             emit("game_error", {"message": "Black player already assigned"})
             return
 
-        # ✅ FIX 8: Re-fetch game after potential update
+       
         game = db.query(Game).filter(Game.id == game_id).first()
 
         print(f"[SOCKET] Game state after: white={game.white_player_id}, black={game.black_player_id}")
@@ -426,7 +426,7 @@ def handle_join_game(data):
             "status": game.status.value,
             "fen": game.fen,
             "board": serialize_board(board)
-        }, room=game_room)
+        }, to=game_room)
         print (f"[SOCKET] Emit game_state with status : {game.status.value}")
         print(f"[SOCKET] Emitted game_state with white={game.white_player_id}, black={game.black_player_id}")
 
@@ -454,7 +454,7 @@ def handle_leave_room(data):
         room = room_repo.get_by_code(room_code)
         if room:
             rp_repo.remove_player(room.id, user.id)
-            db.commit()  # ✅ Commit để chắc
+            db.commit()  
             print(f"[SOCKET] {user.username} left room {room_code}")
 
         leave_room(room_code)
@@ -462,7 +462,7 @@ def handle_leave_room(data):
         socketio.emit("user_left", {
             "user": user.username,
             "user_id": user.id
-        }, room=room_code)
+        }, to=room_code)
     finally:
         db.close()
 
@@ -500,36 +500,58 @@ def handle_move(data):
             to = data["move"]["to"]
             move_str = to_chess_notation(fr["row"], fr["col"]) + \
                 to_chess_notation(to["row"], to["col"])
+            promotion = data["move"].get("promotion")
         else:
             move_str = data.get("move")
+            promotion = None
+        
+        # Extract promotion field
+        #promotion = data.get("promotion")
 
-        print(f"[SOCKET] Processing move {move_str} for game {game_id}")
+        if promotion :
+            promotion = promotion.upper()
+            if promotion not in ['Q', 'R', 'B', 'N']:
+                print(f"[SOCKET ERROR] Invalid promotion piece: {promotion}")
+                emit("error", {"message": f"Invalid promotion piece: {promotion}"})
+                return
+        
 
-        # ✅ DEBUG: Log game state TRƯỚC make_move
+            
+
+        print(f"[SOCKET] Processing move {move_str} (promotion: {promotion}) for game {game_id}")
+
+        #  Log game state TRƯỚC make_move
         game_before = gm.game_repo.get_game(game_id)
         print(f"[DEBUG] BEFORE make_move:")
         print(f"  - FEN: {game_before.fen}")
         print(f"  - Turn: {game_before.turn.value}")
 
         # Make the move
-        result = gm.make_move(
-            game_id=game_id,
-            move_str=move_str,
-            player_id=user.id
-        )
+        try:
+            result = gm.make_move(
+                game_id=game_id,
+                move_str=move_str,
+                player_id=user.id,
+                promotion=promotion,
+            )
+        except Exception as e:
+            print(f"[SOCKET ERROR] make_move failed: {str(e)}")
+            emit("error", {"message": str(e)})
+            return
+        
         
         print(f"[DEBUG] make_move result: {result}")
         
-        # ✅ DEBUG: Log game state SAU make_move nhưng TRƯỚC commit
+        # Log game state SAU make_move nhưng TRƯỚC commit
         game_after_make = gm.game_repo.get_game(game_id)
         print(f"[DEBUG] AFTER make_move (before commit):")
         print(f"  - FEN: {game_after_make.fen}")
         print(f"  - Turn: {game_after_make.turn.value}")
         
-        # ✅ COMMIT ngay
+        
         db.commit()
         
-        # ✅ DEBUG: Log game state SAU commit
+        # Log game state SAU commit
         game_after_commit = gm.game_repo.get_game(game_id)
         print(f"[DEBUG] AFTER commit:")
         print(f"  - FEN: {game_after_commit.fen}")
@@ -540,7 +562,7 @@ def handle_move(data):
         move_number = len(moves) + 1
         
         # Record move in database with move_number
-        gm.game_repo.add_move(game_id, move_str, user.id, move_number)
+        gm.game_repo.add_move(game_id, move_str, user.id, move_number,promotion)
         db.commit()
         
         # Get updated game state
@@ -553,15 +575,19 @@ def handle_move(data):
         print(f"  - Board: {serialize_board(board)}")
         
         # Broadcast move to all players in game
-        socketio.emit("move", {
+        socketio.emit("move",{
             "move": move_str,
+            "promotion":promotion,
             "turn": game.turn.value,
             "check": result.get("is_check", False),
             "checkmate": result.get("is_checkmate", False),
+            "stalemate": result.get("is_stalemate", False),
             "fen": game.fen,
             "board": serialize_board(board),
-            "status": game.status.value
-        }, room=f"game_{game_id}")
+            "status": game.status.value,
+            "game_status": result.get("game_status", GameResult.ONGOING.value),
+            "winner": result.get("winner"),
+        },to=f"game_{game_id}")
 
         print(f"[SOCKET] Move broadcasted: {move_str}")
 
@@ -572,6 +598,7 @@ def handle_move(data):
         emit("error", {"message": str(e)})
     finally:
         db.close()
+
 
 # =============================
 # AI MOVE
@@ -586,7 +613,7 @@ def handle_ai_move(data):
 
         # Generate AI move
         result = gm.ai_move(game_id, analyzer)
-        db.commit()  # ✅ Commit ngay
+        db.commit()  
         
         # Get updated game state
         game = gm.game_repo.get_game(game_id)
@@ -594,12 +621,14 @@ def handle_ai_move(data):
 
         # Broadcast AI move to all players
         socketio.emit("ai_move", {
-            **result,
-            "fen": game.fen,
-            "board": serialize_board(board),
-            "turn": game.turn.value,
-            "status": game.status.value
-        }, room=f"game_{game_id}")
+           **result,
+           "fen": game.fen,
+           "board": serialize_board(board),
+           "turn": game.turn.value,
+           "status": game.status.value,
+           "game_status": result.get("game_status", GameResult.ONGOING.value),
+           "winner": result.get("winner"),
+        }, to=f"game_{game_id}")
 
         print(f"[SOCKET] AI move broadcasted")
 
@@ -632,9 +661,119 @@ def handle_create_game(data=None):
             room_id=room.id,
             white_id=user.id,
         )
-        db.commit()  # ✅ Commit
+        db.commit()  
         emit("game_created", {
             "game_id": game.id
         })
     finally:
         db.close()
+
+# =============================
+# RESIGN 
+# =============================
+
+@socketio.on("resign")
+def handle_resign(data):
+    user = get_current_user()
+    if not user:
+        emit("error", {"message": "Unauthorized"})
+        return
+    
+    db, _, _, gm, _ = get_repos()
+    try:
+        game_id = data.get("game_id")
+
+        if not game_id:
+            emit("error", {"message": "Game ID required"})
+            return
+
+        print(f"[SOCKET] {user.username} (ID: {user.id}) resigned from game {game_id}")
+
+        # Process draw acceptance
+        result = gm.accept_draw(game_id, user.id)
+        db.commit()
+
+        # Get updated game
+        game = gm.game_repo.get_game(game_id)
+        board = fen_to_board(game.fen)
+
+        #  Broadcast draw acceptance to all players
+        socketio.emit("game_ended", {
+            "game_id": game_id,
+            "status": game.status.value,
+            "reason": "draw_agreed",
+            "fen": game.fen,
+            "board": serialize_board(board),
+            "turn": game.turn.value,
+        },to=f"game_{game_id}")
+
+        print(f"[SOCKET] Draw accepted for game {game_id}")
+    except Exception as e:
+        print(f"[SOCKET ERROR] accept_draw: {str(e)}")
+        emit("error", {"message": str(e)})
+    finally:
+        db.close()
+
+# =============================
+# OFFER DRAW 
+# =============================
+@socketio.on("offer_draw")
+def handle_offer_draw(data):
+    user = get_current_user()
+    if not user:
+        emit("error", {"message": "Unauthorized"})
+        return
+    db, _, _, gm, _ = get_repos()
+    try:
+        game_id = data.get("game_id")
+        if not game_id:
+            emit("error", {"message": "Game ID required"})
+            return
+
+        print(f"[SOCKET] {user.username} (ID: {user.id}) offered draw for game {game_id}")
+
+        # Process draw acceptance
+        result = gm.accept_draw(game_id, user.id)
+        db.commit()
+
+        # Get updated game
+        game = gm.game_repo.get_game(game_id)
+        board = fen_to_board(game.fen)
+
+        #  Broadcast draw acceptance to all players
+        socketio.emit("game_ended", {
+            "game_id": game_id,
+            "status": game.status.value,
+            "reason": "draw_agreed",
+            "fen": game.fen,
+            "board": serialize_board(board),
+            "turn": game.turn.value,
+        },to=f"game_{game_id}")
+
+        print(f"[SOCKET] Draw accepted for game {game_id}")
+    except Exception as e:
+        print(f"[SOCKET ERROR] accept_draw: {str(e)}")
+        emit("error", {"message": str(e)})
+    finally:
+        db.close()
+
+# =============================
+# REJECT DRAW 
+# =============================
+@socketio.on("reject_draw")
+def handle_reject_draw(data):
+    user = get_current_user()
+    if not user:
+        emit("error", {"message": "Unauthorized"})
+        return
+    game_id = data.get("game_id")
+    if not game_id:
+        emit("error", {"message": "Game ID required"})
+        return
+    print(f"[SOCKET] {user.username} (ID: {user.id}) rejected draw for game {game_id}")
+    # Broadcast rejection to opponent
+    socketio.emit("draw_rejected", {
+        "game_id": game_id,
+        "rejected_by": user.id,
+        "rejected_by_name": user.username,
+    },to=f"game_{game_id}", include_self=False)

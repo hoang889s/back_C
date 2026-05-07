@@ -4,14 +4,14 @@ from persistence.repository.gamerepository import GameRepository
 from persistence.repository.roomplayerrepository import RoomPlayerRepository
 from persistence.repository.roomrepository import RoomRepository
 from persistence.repository.userepository import UserRepository
-from persistence.models import Move, Turn
-from core.utils.fen import board_to_fen
-
+from persistence.models import Move, Turn, GameResult
+from core.utils.fen import board_to_fen, fen_to_board
+from datetime import datetime
 
 class GameManager:
     def __init__(self, db):
         self.db = db
-        self.games = {}
+        self.games = {}  # Cache cho AI analysis
         self.game_repo = GameRepository(db)
         self.room_repo = RoomRepository(db)
         self.room_player_repo = RoomPlayerRepository(db)
@@ -40,112 +40,440 @@ class GameManager:
         }
         return game
 
-    def load_game(self, game_id):
-        """Tải game từ database"""
-        if game_id in self.games:
+    def load_game(self, game_id, use_cache=False):
+        """
+        Load game từ database
+        
+        Args:
+            game_id: ID của game
+            use_cache: Nếu True, dùng cached version (cho AI analysis)
+                      Nếu False, load fresh từ DB (mặc định, an toàn hơn)
+        
+        Returns:
+            dict: {"board": Board, "turn": color, "room_id": ..., "players": [...]}
+        """
+        # Dùng cache chỉ nếu yêu cầu (cho AI analysis)
+        if use_cache and game_id in self.games:
+            print(f"[GameManager] Using cached game {game_id}")
             return self.games[game_id]
+        
+        print(f"[GameManager] Loading game {game_id} from database...")
+        
+        # Load fresh game model từ database
         game_model = self.game_repo.get_game(game_id)
         if not game_model:
             raise Exception("Game not found")
-        board = Board()
-        moves = (
-            self.db.query(Move)
-            .filter(Move.game_id == game_id)
-            .order_by(Move.move_number)
-            .all()
-        )
-        for mv in moves:
-            parsed = self._parse_move(mv.move)
-            board.make_move(parsed)
+        
+        print(f"[GameManager] Game model loaded: FEN={game_model.fen}, turn={game_model.turn.value}")
+        
+        # Load board từ FEN (không replay moves - hiệu quả hơn)
+        board = fen_to_board(game_model.fen)
+        
         game = {
             "board": board,
             "turn": board.turn,
-            "room_id": game_model.room_id
+            "room_id": game_model.room_id,
+            "white_id": game_model.white_player_id,
+            "black_id": game_model.black_player_id,
         }
-        # cache lại
-        self.games[game_id] = game
-        # load players
+        
+        # Load players từ room
         room_players = self.room_player_repo.get_players(game_model.room_id)
         game["players"] = [p.user_id for p in room_players]
+        
+        print(f"[GameManager] Game loaded: {len(game['players'])} players, board.turn={board.turn}")
+        
+        # Chỉ cache nếu yêu cầu
+        if use_cache:
+            self.games[game_id] = game
+        
         return game
 
-    def make_move(self, game_id, move_str, player_id):
-        """Di chuyển quân"""
-        game = self.load_game(game_id)
-        print(f"[GameManager] Game players: {game.get('players', [])}")
-        print(f"[GameManager] Current player: {player_id}")
-        board = game["board"]
-        move = self._parse_move(move_str)
-
+    def make_move(self, game_id, move_str, player_id, promotion):
+        """
+        Di chuyển quân cờ
+        
+        Args:
+            game_id: ID của game
+            move_str: Move string (chess notation, e.g., 'e2e4')
+            player_id: ID của player đang đi
+            promotion: Promotion piece (Q, R, B, N) hoặc None
+        
+        Returns:
+            dict: {
+                "move": move_str,
+                "promotion": promotion,
+                "turn": next_turn,
+                "is_check": bool,
+                "is_checkmate": bool,
+                "is_stalemate": bool,
+                "game_status": str,
+                "winner": int or None
+            }
+        """
+        print(f"\n[GameManager] ========== MAKE_MOVE START ==========")
+        print(f"[GameManager] game_id={game_id}, move_str={move_str}, player_id={player_id}, promotion={promotion}")
+        
+        #  Load fresh game model từ database (không dùng cache)
         game_model = self.game_repo.get_game(game_id)
-        room_players = self.room_player_repo.get_players(game_model.room_id)
-        players = [p.user_id for p in room_players]
-
-        # validate turn
-        if player_id not in players:
-            raise Exception("Player not in game")
-
-        # validate move
+        if not game_model:
+            print(f"[GameManager] ❌ Game {game_id} not found")
+            raise Exception("Game not found")
+        
+        print(f"[GameManager] Game model: white={game_model.white_player_id}, black={game_model.black_player_id}")
+        print(f"[GameManager] Current turn: {game_model.turn.value}")
+        print(f"[GameManager] Current FEN: {game_model.fen}")
+        
+        #  Load board từ FEN (fresh state)
+        board = fen_to_board(game_model.fen)
+        print(f"[GameManager] Board loaded from FEN, board.turn={board.turn}")
+        
+        #  Validate player turn
+        if game_model.turn == Turn.WHITE:
+            expected_player = game_model.white_player_id
+            expected_color = "WHITE"
+        else:
+            expected_player = game_model.black_player_id
+            expected_color = "BLACK"
+        
+        print(f"[GameManager] Expected player: {expected_player} ({expected_color})")
+        
+        if player_id != expected_player:
+            print(f"[GameManager] ❌ Player {player_id} is not {expected_color} (expected {expected_player})")
+            raise Exception(f"Not your turn. Expected {expected_color} player (ID: {expected_player})")
+        
+        print(f"[GameManager] ✅ Player turn validated")
+        
+        #  Parse move (convert chess notation to tuple)
+        try:
+            move = self._parse_move(move_str, promotion=promotion)
+            print(f"[GameManager] Parsed move: {move}")
+        except Exception as e:
+            print(f"[GameManager] ❌ Parse error: {e}")
+            raise
+        
+        #  Generate all legal moves and validate
+        print(f"[GameManager] Generating legal moves for color {board.turn}...")
         legal_moves = board.generate_all_legal_moves(board.turn)
+        print(f"[GameManager] Legal moves count: {len(legal_moves)}")
+        if len(legal_moves) <= 20:
+            print(f"[GameManager] All legal moves: {legal_moves}")
+        else:
+            print(f"[GameManager] First 20 legal moves: {legal_moves[:20]}")
+        
         if move not in legal_moves:
-            raise Exception("Invalid move")
-
-        # Make the move on board
+            print(f"[GameManager] ❌ Move {move} NOT in legal moves!")
+            print(f"[GameManager]    Requested: {move}")
+            print(f"[GameManager]    Available: {legal_moves}")
+            raise Exception(f"Invalid move: {move_str}")
+        
+        print(f"[GameManager] ✅ Move is legal")
+        
+        #  Make the move on board
+        print(f"[GameManager] Making move on board...")
         board.make_move(move)
-
-        # ✅ Update game model in database
-        self._update_game_state(game_model, board)
-
+        print(f"[GameManager] ✅ Move made, new turn: {board.turn}")
+        
+        #  Update game model in database
+        print(f"[GameManager] Updating game state in database...")
+        result = self._update_game_state(game_model, board)
+        print(f"[GameManager] ✅ Game state updated")
+        
+        #  Clear cache (game state changed)
+        if game_id in self.games:
+            print(f"[GameManager] Clearing cache for game {game_id}")
+            del self.games[game_id]
+        
+        print(f"[GameManager] ========== MAKE_MOVE END ==========\n")
+        
+        #  Return result (đúng format)
         return {
             "move": move_str,
+            "promotion": promotion,
             "turn": board.turn,
-            "is_check": board.is_in_check(board.turn),
-            "is_checkmate": board.is_checkmate(board.turn),
+            "is_check": result["is_check"],
+            "is_checkmate": result["is_checkmate"],
+            "is_stalemate": result["is_stalemate"],
+            "game_status": result["game_status"],
+            "winner": result["winner"],
         }
 
     def _update_game_state(self, game_model, board):
-        """Update game state in database"""
+        """
+        Update game state in database after a move
+        
+        Returns:
+            dict: {
+                "is_check": bool,
+                "is_checkmate": bool,
+                "is_stalemate": bool,
+                "game_status": str (enum value),
+                "winner": int or None
+            }
+        """
+        #  Convert board to FEN
         new_fen = board_to_fen(board)
         new_turn = Turn.BLACK if board.turn == BLACK else Turn.WHITE
-
+        
+        print(f"[GameManager] Updating game state:")
+        print(f"  - Old FEN: {game_model.fen}")
+        print(f"  - New FEN: {new_fen}")
+        print(f"  - Old turn: {game_model.turn.value}")
+        print(f"  - New turn: {new_turn.value}")
+        
+        #  Check for check/checkmate/stalemate
+        is_check = board.is_in_check(board.turn)
+        is_checkmate = board.is_checkmate(board.turn)
+        is_stalemate = board.is_stalemate(board.turn)
+        
+        print(f"  - Check: {is_check}, Checkmate: {is_checkmate}, Stalemate: {is_stalemate}")
+        
+        #  Initialize result
+        result = {
+            "is_check": is_check,
+            "is_checkmate": is_checkmate,
+            "is_stalemate": is_stalemate,
+            "game_status": GameResult.ONGOING.value,
+            "winner": None,
+        }
+        
+        #  Update FEN and turn
         game_model.fen = new_fen
         game_model.turn = new_turn
-
+        
+        #  Handle checkmate
+        if is_checkmate:
+            # Người vừa di chuyển là người thắng (đối thủ bị checkmate)
+            if new_turn == Turn.WHITE:
+                # Black vừa di chuyển, White bị checkmate
+                winner = game_model.black_player_id
+                game_model.black_won = True
+                game_model.status = GameResult.ONGOING  # Status chưa change?
+                game_model.end_reason = "checkmate"
+                print(f"[GameManager] CHECKMATE: Black player {winner} wins!")
+            else:
+                # White vừa di chuyển, Black bị checkmate
+                winner = game_model.white_player_id
+                game_model.white_won = True
+                game_model.status = GameResult.ONGOING
+                game_model.end_reason = "checkmate"
+                print(f"[GameManager] CHECKMATE: White player {winner} wins!")
+            
+            game_model.ended_at = datetime.now()
+            result["game_status"] = GameResult.ONGOING.value
+            result["winner"] = winner
+        
+        #  Handle stalemate (draw)
+        elif is_stalemate:
+            game_model.status = GameResult.DRAW
+            game_model.end_reason = "stalemate"
+            game_model.ended_at = datetime.now()
+            result["game_status"] = GameResult.DRAW.value
+            print(f"[GameManager] STALEMATE: Draw")
+        
+        #  Commit to database
         self.db.add(game_model)
         self.db.flush()
+        
+        print(f"[GameManager] Game {game_model.id} updated in database")
+        
+        return result
 
-        print(f"[GameManager] Updated game {game_model.id}:")
-        print(f"  - FEN: {game_model.fen}")
-        print(f"  - Turn: {game_model.turn.value}")
+    def _parse_move(self, move_str, promotion=None):
+        """
+        Convert move string (e.g., 'e2e4') to tuple
+        
+        Args:
+            move_str: String like 'e2e4', 'e1g1' (castling)
+            promotion: 'Q', 'R', 'B', 'N' (for pawn promotion)
+        
+        Returns:
+            tuple: (from_row, from_col, to_row, to_col)
+                   or (from_row, from_col, to_row, to_col, move_type)
+                   where move_type is 'castle' or 'promotion_Q' etc.
+        """
+        def to_index(sq):
+            """Convert square like 'e2' to (row, col)"""
+            col = ord(sq[0]) - ord('a')  # 0-7
+            row = 8 - int(sq[1])          # 0-7
+            return row, col
+        
+        print(f"[GameManager] Parsing move: {move_str}, promotion={promotion}")
+        
+        # Validate format
+        if not isinstance(move_str, str) or len(move_str) != 4:
+            raise Exception(f"Invalid move format: {move_str}. Expected 4 characters like 'e2e4'")
+        
+        try:
+            from_sq = move_str[:2]
+            to_sq = move_str[2:4]
+            
+            fr = to_index(from_sq)  # (row, col)
+            to = to_index(to_sq)    # (row, col)
+            
+            print(f"[GameManager] From: {from_sq} ({fr[0]}, {fr[1]})")
+            print(f"[GameManager] To: {to_sq} ({to[0]}, {to[1]})")
+            
+        except (ValueError, IndexError) as e:
+            raise Exception(f"Invalid move format: {move_str}. {str(e)}")
+        
+        #  Detect castling (king move 2 squares horizontally)
+        if fr[1] == 4 and abs(to[1] - fr[1]) == 2:  # Column e = index 4
+            if fr[0] in (0, 7):  # Row 0 (black) or 7 (white)
+                print(f"[GameManager] Detected castling move")
+                return (fr[0], fr[1], to[0], to[1], "castle")
+        
+        #  Handle promotion
+        if promotion:
+            promotion = promotion.upper()
+            if promotion not in ['Q', 'R', 'B', 'N']:
+                raise Exception(f"Invalid promotion piece: {promotion}. Must be Q, R, B, or N")
+            # Validate destination is rank 1 or 8
+            if to[0] not in (0,7):
+                raise Exception(f"Promotion only allowed on rank 1 or 8, got rank {8 - to[0]}")
+            print(f"[GameManager] Promotion detected: {promotion}")
+            return (fr[0], fr[1], to[0], to[1], f"{promotion}")
+        
+        #  Regular move
+        return (fr[0], fr[1], to[0], to[1])
 
     def ai_move(self, game_id, analyzer):
-        """AI di chuyển"""
-        game = self.load_game(game_id)
-        board = game["board"]
-        result = analyzer.analyze(board, board.turn)
-        move_str = result["best_move"]
-        move = self._parse_move(move_str)
-        board.make_move(move)
-
-        # ✅ Update database sau AI move
+        """
+        AI makes a move
+        
+        Args:
+            game_id: Game ID
+            analyzer: Analyzer instance
+        
+        Returns:
+            dict: Similar to make_move() return value
+        """
+        print(f"\n[GameManager] ========== AI_MOVE START ==========")
+        print(f"[GameManager] game_id={game_id}")
+        
+        # Load fresh game model
         game_model = self.game_repo.get_game(game_id)
-        self._update_game_state(game_model, board)
-
+        if not game_model:
+            raise Exception("Game not found")
+        
+        print(f"[GameManager] Game: white={game_model.white_player_id}, black={game_model.black_player_id}")
+        print(f"[GameManager] FEN: {game_model.fen}")
+        
+        # Load board from FEN
+        board = fen_to_board(game_model.fen)
+        
+        # Run analyzer
+        print(f"[GameManager] Running analyzer...")
+        result = analyzer.analyze(board, board.turn)
+        move_str = result.get("best_move")
+        
+        if not move_str:
+            raise Exception("Analyzer returned no move")
+        
+        print(f"[GameManager] AI suggested move: {move_str}")
+        
+        # Parse move
+        move = self._parse_move(move_str)
+        
+        # Validate legal
+        legal_moves = board.generate_all_legal_moves(board.turn)
+        if move not in legal_moves:
+            raise Exception(f"Invalid AI move: {move_str}")
+        
+        print(f"[GameManager] ✅ AI move is legal")
+        
+        # Make the move
+        board.make_move(move)
+        
+        # Update database
+        update_result = self._update_game_state(game_model, board)
+        
+        # Clear cache
+        if game_id in self.games:
+            del self.games[game_id]
+        
+        print(f"[GameManager] ========== AI_MOVE END ==========\n")
+        
         return {
             **result,
             "move": move_str,
             "turn": board.turn,
-            "is_check": board.is_in_check(board.turn),
-            "is_checkmate": board.is_checkmate(board.turn),
+            "is_check": update_result["is_check"],
+            "is_checkmate": update_result["is_checkmate"],
+            "is_stalemate": update_result["is_stalemate"],
+            "game_status": update_result["game_status"],
+            "winner": update_result["winner"],
         }
 
-    def _parse_move(self, move_str):
-        """Convert move string (e.g., 'e2e4') to tuple (row_from, col_from, row_to, col_to)"""
-        def to_index(sq):
-            col = ord(sq[0]) - ord('a')
-            row = 8 - int(sq[1])
-            return row, col
-
-        fr = to_index(move_str[:2])
-        to = to_index(move_str[2:4])
-        return (fr[0], fr[1], to[0], to[1])
+    def resign_game(self, game_id, player_id):
+        """Xử lý resignation"""
+        game_model = self.game_repo.get_game(game_id)
+        if not game_model:
+            raise Exception("Game not found")
+        
+        if game_model.status != GameResult.ONGOING:
+            raise Exception("Game is not ongoing")
+        
+        if player_id == game_model.white_player_id:
+            game_model.black_won = True
+            winner_id = game_model.black_player_id
+            loser_id = game_model.white_player_id
+            print(f"[GameManager] White resigned. Black wins!")
+        elif player_id == game_model.black_player_id:
+            game_model.white_won = True
+            winner_id = game_model.white_player_id
+            loser_id = game_model.black_player_id
+            print(f"[GameManager] Black resigned. White wins!")
+        else:
+            raise Exception("Player not in game")
+        
+        game_model.end_reason = "resignation"
+        game_model.resigned_by = player_id
+        game_model.ended_at = datetime.now()
+        
+        self.db.add(game_model)
+        self.db.flush()
+        
+        return {
+            "game_status": game_model.status.value,
+            "winner": winner_id,
+            "loser": loser_id,
+            "reason": "resignation"
+        }
+    
+    def offer_draw(self, game_id, player_id):
+        """Đề nghị hòa"""
+        game_model = self.game_repo.get_game(game_id)
+        if not game_model:
+            raise Exception("Game not found")
+        
+        if game_model.status != GameResult.ONGOING:
+            raise Exception("Game is not ongoing")
+        
+        game_model.draw_offered_by = player_id
+        self.db.add(game_model)
+        self.db.flush()
+        
+        print(f"[GameManager] Player {player_id} offered draw in game {game_id}")
+        
+        return {"game_id": game_id, "player_id": player_id}
+    
+    def accept_draw(self, game_id, player_id):
+        """Chấp nhận hòa"""
+        game_model = self.game_repo.get_game(game_id)
+        if not game_model:
+            raise Exception("Game not found")
+        
+        if game_model.status != GameResult.ONGOING:
+            raise Exception("Game is not ongoing")
+        
+        game_model.status = GameResult.DRAW
+        game_model.end_reason = "draw_agreed"
+        game_model.ended_at = datetime.now()
+        
+        self.db.add(game_model)
+        self.db.flush()
+        
+        print(f"[GameManager] Game {game_id} ended in draw")
+        
+        return {"game_status": game_model.status.value, "reason": "draw_agreed"}

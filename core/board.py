@@ -140,9 +140,9 @@ class Board:
                     self.board[0][0] = EMPTY
         # phần promotion (phong quân tốt)
         # nếu move_type đúng và move_type bắt đầu bằng promotion
-        elif move_type and move_type.startswith("promotion"):
+        elif move_type and move_type in ('Q', 'R', 'B', 'N'):
             # lấy chữ cái đầu sau khi promotion ví dụ promotion_Q lấy 1 ký tự
-            promoted_piece = move_type.split("_")[1]
+            promoted_piece = move_type
             # phân biệt quân hai bên nếu trắng đùng chữ không thì ngược lại
             if self.is_white(piece):
                 self.board[tr][tc] = promoted_piece.upper()

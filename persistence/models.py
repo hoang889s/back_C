@@ -142,6 +142,7 @@ class RoomPlayer(Base):
     )
 
     role = Column(String(20), default="player")
+    created_at = Column(DATETIME2, server_default=func.now())
     joined_at = Column(DATETIME2, server_default=func.now())
 
     # relationships
@@ -155,7 +156,7 @@ class Game(Base):
 
     id = Column(Integer, primary_key=True)
 
-    # ✅ CHỈ 1 FK duy nhất tới Room
+    
     room_id = Column(
         Integer,
         ForeignKey("rooms.id", ondelete="CASCADE"),
@@ -213,6 +214,14 @@ class Game(Base):
         order_by="Move.move_number"
     )
 
+    white_won =  Column(Boolean, default=False, nullable=False)
+
+    black_won = Column(Boolean, default=False, nullable=False)
+    end_reason = Column(String(50), nullable=True)
+    resigned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    draw_offered_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    ended_at = Column(DATETIME2, nullable=True)
+
 # ================= MOVE =================
 
 class Move(Base):
@@ -227,6 +236,9 @@ class Move(Base):
     )
 
     move = Column(String(20), nullable=False)
+
+    promotion = Column(String(1), nullable=True)
+    
     move_number = Column(Integer)
 
     player_id = Column(

@@ -23,7 +23,7 @@ class GameRepository(BaseRepository):
     def get_by_room_id(self, room_id):
         return self.db.query(Game).filter(Game.room_id == room_id).first()
     # add move ok
-    def add_move(self, game_id, move_str, player_id, move_number):
+    def add_move(self, game_id, move_str, player_id, move_number,promotion=None):
         game = self.get_game(game_id)
         if not game:
             return None
@@ -32,10 +32,12 @@ class GameRepository(BaseRepository):
             game_id=game_id,
             move=move_str,
             player_id=player_id,
-            move_number=move_number
+            move_number=move_number,
+            promotion=promotion
         )
-        self.add(mv)
-        self.commit()
+        self.db.add(mv)
+        self.db.flush()
+        #self.commit()
         return mv
     # update game ok
     def update_game_state(self, game_id, fen=None, turn=None, status=None):
