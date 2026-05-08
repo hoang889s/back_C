@@ -1,5 +1,7 @@
 from core.constants import WHITE,BLACK
 from core.minimax import Minimax
+from core.utils.fen import fen_to_board
+from core.board import Board
 class Analyzer:
     def __init__(self, depth: int = 4):
         self.depth = depth
@@ -59,4 +61,15 @@ class Analyzer:
         if len(move) == 5:
             move_str += f"={move[4]}"
         return move_str
+    def get_best_move(self, fen, color):
+        board = fen_to_board(fen)
+
+        self.engine.init_score(board)
+
+        best_move = self.engine.find_best_move(board, color)
+
+        if not best_move:
+            return None
+
+        return best_move
 

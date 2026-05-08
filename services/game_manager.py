@@ -120,13 +120,34 @@ class GameManager:
             print(f"[GameManager] ❌ Game {game_id} not found")
             raise Exception("Game not found")
         
-        print(f"[GameManager] Game model: white={game_model.white_player_id}, black={game_model.black_player_id}")
+        print(f"[GameManager] Game: is_ai={getattr(game_model, 'is_ai', False)}")
+        print(f"[GameManager] Players: white={game_model.white_player_id}, black={game_model.black_player_id}")
         print(f"[GameManager] Current turn: {game_model.turn.value}")
         print(f"[GameManager] Current FEN: {game_model.fen}")
         
         #  Load board từ FEN (fresh state)
         board = fen_to_board(game_model.fen)
         print(f"[GameManager] Board loaded from FEN, board.turn={board.turn}")
+        is_ai_game = getattr(game_model, 'is_ai', False)
+        if is_ai_game:
+            print(f"[GameManager] 🤖 AI Mode detected")
+            if player_id == game_model.white_player_id:
+                if game_model.black_player_id is not None:
+                    if game_model.black_player_id != player_id:
+                        print(f"[GameManager] ✅ Player {player_id} is white (human)")
+                else:
+                    print(f"[GameManager] ⚠️ AI (black) chưa được assign")
+            elif player_id == game_model.black_player_id:
+                if game_model.white_player_id is not None:
+                    if game_model.white_player_id != player_id:
+                        print(f"[GameManager] ✅ Player {player_id} is black (human)")
+                else:
+                    print(f"[GameManager] ⚠️ AI (white) chưa được assign")
+            else:
+                print(f"[GameManager] ❌ Player {player_id} not in this game!")
+                raise Exception(f"Player {player_id} is not in this game")
+            
+
         
         #  Validate player turn
         if game_model.turn == Turn.WHITE:
@@ -198,7 +219,7 @@ class GameManager:
             "winner": result["winner"],
         }
 
-    def _update_game_state(self, game_model, board):
+    def _update_game_state(self, game_model, board,is_ai_game=False):
         """
         Update game state in database after a move
         
@@ -243,24 +264,19 @@ class GameManager:
         
         #  Handle checkmate
         if is_checkmate:
-            # Người vừa di chuyển là người thắng (đối thủ bị checkmate)
+            # Người vừa di chuyển là người thắng
             if new_turn == Turn.WHITE:
-                # Black vừa di chuyển, White bị checkmate
                 winner = game_model.black_player_id
-                game_model.black_won = True
-                game_model.status = GameResult.ONGOING  # Status chưa change?
-                game_model.end_reason = "checkmate"
+                game_model.status = GameResult.WIN if is_ai_game else GameResult.ONGOING
                 print(f"[GameManager] CHECKMATE: Black player {winner} wins!")
             else:
-                # White vừa di chuyển, Black bị checkmate
                 winner = game_model.white_player_id
-                game_model.white_won = True
-                game_model.status = GameResult.ONGOING
-                game_model.end_reason = "checkmate"
+                game_model.status = GameResult.WIN if is_ai_game else GameResult.ONGOING
                 print(f"[GameManager] CHECKMATE: White player {winner} wins!")
             
+            game_model.end_reason = "checkmate"
             game_model.ended_at = datetime.now()
-            result["game_status"] = GameResult.ONGOING.value
+            result["game_status"] = GameResult.WIN.value if is_ai_game else "checkmate"
             result["winner"] = winner
         
         #  Handle stalemate (draw)
@@ -356,55 +372,53 @@ class GameManager:
         if not game_model:
             raise Exception("Game not found")
         
+        is_ai_game = getattr(game_model, 'is_ai', False)
+        if not is_ai_game:
+            print(f"[GameManager] ❌ This is not an AI game!")
+            raise Exception("Not an AI game")
+        
+        print(f"[GameManager] 🤖 AI Mode - Current turn: {game_model.turn.value}")
+        
         print(f"[GameManager] Game: white={game_model.white_player_id}, black={game_model.black_player_id}")
         print(f"[GameManager] FEN: {game_model.fen}")
         
         # Load board from FEN
         board = fen_to_board(game_model.fen)
         
-        # Run analyzer
-        print(f"[GameManager] Running analyzer...")
-        result = analyzer.analyze(board, board.turn)
-        move_str = result.get("best_move")
-        
-        if not move_str:
-            raise Exception("Analyzer returned no move")
-        
-        print(f"[GameManager] AI suggested move: {move_str}")
-        
-        # Parse move
-        move = self._parse_move(move_str)
-        
-        # Validate legal
-        legal_moves = board.generate_all_legal_moves(board.turn)
-        if move not in legal_moves:
-            raise Exception(f"Invalid AI move: {move_str}")
-        
-        print(f"[GameManager] ✅ AI move is legal")
-        
-        # Make the move
-        board.make_move(move)
-        
-        # Update database
-        update_result = self._update_game_state(game_model, board)
-        
-        # Clear cache
-        if game_id in self.games:
-            del self.games[game_id]
-        
-        print(f"[GameManager] ========== AI_MOVE END ==========\n")
-        
-        return {
-            **result,
-            "move": move_str,
-            "turn": board.turn,
-            "is_check": update_result["is_check"],
-            "is_checkmate": update_result["is_checkmate"],
-            "is_stalemate": update_result["is_stalemate"],
-            "game_status": update_result["game_status"],
-            "winner": update_result["winner"],
-        }
+        if game_model.turn == Turn.WHITE:
+            ai_player_id = game_model.white_player_id
+            color = "white"
+        else:
+            ai_player_id = game_model.black_player_id
+            color = "black"
+        print(f"[GameManager] 🤖 AI ({color}) is thinking...")
+        try:
+            best_move_info = analyzer.get_best_move(game_model.fen, depth=4)
+            move_str = best_move_info["move"]
+            promotion = best_move_info.get("promotion")
 
+            print(f"[GameManager] 🤖 AI chose: {move_str} (promotion: {promotion})")
+
+        except Exception as e:
+            print(f"[GameManager] ❌ Analyzer error: {e}")
+            # Fallback: Generate random legal move
+            legal_moves = board.generate_all_legal_moves(board.turn)
+            if not legal_moves:
+                print(f"[GameManager] ❌ No legal moves available!")
+                raise Exception("No legal moves available")
+            import random
+            move = random.choice(legal_moves)
+            move_str = self._move_to_notation(move)
+            promotion = None
+            print(f"[GameManager] 🤖 Fallback move: {move_str}")
+        try:
+            result = self.make_move(game_id, move_str, ai_player_id, promotion)
+            print(f"[GameManager] ========== AI_MOVE END ==========\n")
+            return result
+        except Exception as e:
+            print(f"[GameManager] ❌ AI move failed: {e}")
+            raise
+    
     def resign_game(self, game_id, player_id):
         """Xử lý resignation"""
         game_model = self.game_repo.get_game(game_id)
@@ -477,3 +491,32 @@ class GameManager:
         print(f"[GameManager] Game {game_id} ended in draw")
         
         return {"game_status": game_model.status.value, "reason": "draw_agreed"}
+    def _move_to_notation(self, move):
+        """
+        Convert move tuple -> chess notation
+
+        Example:
+        (6, 4, 4, 4) -> e2e4
+        (1, 4, 3, 4) -> e7e5
+        """
+        if not move:
+            return None
+
+        from_row, from_col, to_row, to_col = move[:4]
+
+        def to_square(row, col):
+            file_char = chr(ord('a') + col)
+            rank_char = str(8 - row)
+            return file_char + rank_char
+
+        move_str = (
+            to_square(from_row, from_col) +
+            to_square(to_row, to_col)
+        )
+
+    # Promotion
+        if len(move) == 5:
+            promotion_piece = str(move[4]).lower()
+            move_str += promotion_piece
+
+        return move_str

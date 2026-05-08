@@ -189,6 +189,7 @@ class Game(Base):
         default=GameResult.ONGOING,
         nullable=False
     )
+    is_ai = Column(Boolean, default=False)
 
     created_at = Column(DATETIME2, server_default=func.now())
 

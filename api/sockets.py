@@ -146,10 +146,15 @@ def handle_create_room(data=None):
     db, room_repo, rp_repo, _, _ = get_repos()
     try:
         chosen_color = data.get("color","white").lower()
+        mode = data.get("mode","human").lower()
         print(f"[SOCKET] Chosen color: {chosen_color}")
 
         if chosen_color not in ["white", "black"]:
             emit("error", {"message": "Color must be 'white' or 'black'"})
+            return
+        
+        if mode not in ["human","ai"]:
+            emit("error", {"message": "Mode must be 'human' or 'ai'"})
             return
         
         print(f"[SOCKET] Creating room with owner_id: {user.id}, owner_username: {user.username}")
@@ -157,7 +162,7 @@ def handle_create_room(data=None):
         room = room_repo.create_room(
             owner_id=user.id,
             name=data.get("name", "Chess Room"),
-            mode=data.get("mode", "human"),
+            mode=mode,
         )
 
         print(f"[SOCKET] Room created in DB: code={room.code}, id={room.id}, owner_id={room.owner_id}")
@@ -179,11 +184,13 @@ def handle_create_room(data=None):
         print(f"  - user_id: {user.id}")
         print(f"  - username: {user.username}")
         print(f"  - owner_color: {chosen_color}")
+        print(f"  - mode:{mode}")
         emit("room_created", {
             "room_code": room.code,
             "user_id": user.id,
             "username": user.username,
             "owner_color": chosen_color,
+            "mode":mode,
         })
         print(f"[SOCKET] ✅ Room created successfully: {room.code} by {user.username}")
     except Exception as e:
@@ -331,9 +338,44 @@ def handle_join_room(data):
                 "fen": game.fen,
                 "board": serialize_board(board)
             }, to=game_room)
-        else:
+        elif  updated_count == 1 and room.mode == "ai":
+            # ← MỚI: Nếu là mode AI, tự động tạo game khi có 1 người
+            print(f"[SOCKET] AI mode detected, creating AI game...")
+
+            game = gm.game_repo.create_game(
+                room_id=room.id,
+                white_id=room.owner_id if room.owner_color == "white" else None,
+                black_id=room.owner_id if room.owner_color == "black" else None,
+            )
+            game.is_ai = True
+            room.game_id = game.id
+            room.player_count = 1
+            db.commit()
+
+            board = fen_to_board(game.fen)
+            game_room = f"game_{game.id}"
+
+            join_room(game_room)
+            socketio.emit("game_created", {
+                "game_id": game.id,
+                "room_code": room_code,
+                "mode": "ai",
+            },to=room_code)
+
+            socketio.emit("game_state", {
+                "gameId": game.id,
+                "game_id": game.id,
+                "room_code": room.code,
+                "white": game.white_player_id,
+                "black": game.black_player_id,
+                "turn": game.turn.value,
+                "status": game.status.value,
+                "fen": game.fen,
+                "board": serialize_board(board)
+            },to=game_room)
             
-            print(f"[DEBUG] Only {updated_count} player(s), waiting for second player...")
+            
+            #print(f"[DEBUG] Only {updated_count} player(s), waiting for second player...")
 
         # Send room_joined with game_id
         emit("room_joined", {
@@ -490,7 +532,7 @@ def handle_move(data):
 
     print(f"[SOCKET] Move data: {data}")
 
-    db, _, _, gm, _ = get_repos()
+    db, _, _, gm, analyzer = get_repos()
     try:
         game_id = data.get("game_id")
         
@@ -588,6 +630,29 @@ def handle_move(data):
             "game_status": result.get("game_status", GameResult.ONGOING.value),
             "winner": result.get("winner"),
         },to=f"game_{game_id}")
+        if game.is_ai and game.status == GameResult.ONGOING:
+            try:
+                print(f"[SOCKET] Triggering AI move for game {game_id}")
+                ai_result = gm.ai_move(game_id, analyzer)
+                db.commit()
+                updated_game = gm.game_repo.get_game(game_id)
+                updated_board = fen_to_board(updated_game.fen)
+                socketio.emit("ai_move", {
+                    **ai_result,
+                    "fen": updated_game.fen,
+                    "board": serialize_board(updated_board),
+                    "turn": updated_game.turn.value,
+                    "status": updated_game.status.value,
+                    "game_status": ai_result.get(
+                        "game_status",
+                        GameResult.ONGOING.value
+                    ),
+                    "winner": ai_result.get("winner"),
+                },to=f"game_{game_id}")
+                print(f"[SOCKET] AI move broadcasted")
+            except Exception as ai_error:
+                print(f"[SOCKET ERROR] AI auto move failed: {str(ai_error)}")
+            
 
         print(f"[SOCKET] Move broadcasted: {move_str}")
 
@@ -652,19 +717,50 @@ def handle_create_game(data=None):
     db, room_repo, _, gm, _ = get_repos()
     try:
         room_code = data.get("room_code")
+        mode = data.get("mode","human")
+
         room = room_repo.get_by_code(room_code)
         if not room:
             emit("error", {"message": "Room not found"})
             return
+        
+        print(f"[SOCKET] Creating game - Mode: {mode}")
 
-        game = gm.game_repo.create_game(
-            room_id=room.id,
-            white_id=user.id,
-        )
-        db.commit()  
-        emit("game_created", {
-            "game_id": game.id
+        if mode == "ai":
+            # ← MODE AI: Tạo game với người dùng vs AI
+            # AI sẽ là black player (hoặc white tùy theo lựa chọn)
+            if room.owner_color == "white":
+                white_id = user.id
+                black_id = None
+            else :
+                 white_id = None
+                 black_id = user.id
+            game = gm.game_repo.create_game(
+                room_id = room.id,
+                white_id=white_id,
+                black_id=black_id,
+            )
+            # Đánh dấu game là AI mode
+            game.is_ai = True
+            db.commit()
+            print(f"[SOCKET] AI Game created: {game.id}")
+        else:
+            # ← MODE HUMAN: Tạo game với white player đã biết
+            game = gm.game_repo.create_game(
+                room_id=room.id,
+                white_id=user.id,
+            )
+            db.commit()
+            print(f"[SOCKET] Human Game created: {game.id}")
+        emit("game_created",{
+            "game_id": game.id,
+            "mode":mode,
         })
+    except Exception as e:
+        print(f"[SOCKET ERROR] create_game: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        emit("error", {"message": str(e)})
     finally:
         db.close()
 
