@@ -72,4 +72,3 @@ class Analyzer:
             return None
 
         return best_move
-

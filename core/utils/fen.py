@@ -26,8 +26,15 @@ def fen_to_board(fen: str) -> Board:
 
     fen = normalize_fen(fen)
     parts = fen.split()
+    piece_part = parts[0]
+    turn_part = parts[1]
+    castle_part = parts[2]
+    ep_part = parts[3]
+    halfmove_part = parts[4]
+    fullmove_part = parts[5]
 
-    rows = parts[0].split("/")
+
+    rows = piece_part.split("/")
 
     new_board = []
 
@@ -44,6 +51,19 @@ def fen_to_board(fen: str) -> Board:
 
     # turn
     board.turn = WHITE if parts[1] == "w" else BLACK
+
+    # castling rights
+    board.white_can_castle_kingside  = "K" in castle_part
+    board.white_can_castle_queenside = "Q" in castle_part
+    board.black_can_castle_kingside  = "k" in castle_part
+    board.black_can_castle_queenside = "q" in castle_part
+
+    # en passant
+    board.en_passant = None if ep_part == "-" else ep_part
+
+    # clocks
+    board.halfmove_clock = int(halfmove_part)
+    board.fullmove_number = int(fullmove_part)
 
     return board
 
@@ -72,5 +92,25 @@ def board_to_fen(board: Board) -> str:
     fen_board = "/".join(fen_rows)
 
     turn = "w" if board.turn == WHITE else "b"
+    castle = ""
+    if board.white_can_castle_kingside:
+        castle += "K"
+    if board.white_can_castle_queenside:
+        castle += "Q"
+    if board.black_can_castle_kingside:
+        castle += "k"
+    if board.black_can_castle_queenside:
+        castle += "q"
+    if castle == "":
+        castle = "-"
 
-    return f"{fen_board} {turn} - - 0 1"
+    ep = board.en_passant if board.en_passant else "-"
+
+    return (
+        f"{fen_board} "
+        f"{turn} "
+        f"{castle} "
+        f"{ep} "
+        f"{board.halfmove_clock} "
+        f"{board.fullmove_number}"
+    )

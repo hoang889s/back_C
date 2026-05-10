@@ -349,9 +349,7 @@ class GameManager:
                 raise Exception(f"Promotion only allowed on rank 1 or 8, got rank {8 - to[0]}")
             print(f"[GameManager] Promotion detected: {promotion}")
             return (fr[0], fr[1], to[0], to[1], f"{promotion}")
-        
-        #  Regular move
-        return (fr[0], fr[1], to[0], to[1])
+        return (fr[0],fr[1],to[0],to[1])
 
     def ai_move(self, game_id, analyzer):
         """
@@ -387,22 +385,27 @@ class GameManager:
         
         if game_model.turn == Turn.WHITE:
             ai_player_id = game_model.white_player_id
-            color = "white"
+            color = WHITE
         else:
             ai_player_id = game_model.black_player_id
-            color = "black"
+            color = BLACK
         print(f"[GameManager] 🤖 AI ({color}) is thinking...")
         try:
-            best_move_info = analyzer.get_best_move(game_model.fen, depth=4)
-            move_str = best_move_info["move"]
-            promotion = best_move_info.get("promotion")
+            best_move = analyzer.get_best_move(game_model.fen, color)
+            if not best_move:
+                raise Exception("AI could not find move")
+            move_str = self._move_to_notation(best_move)
+            promotion = None
+            if len(best_move) == 5:
+                promotion = best_move[4].upper() if isinstance(best_move[4], str) else best_move[4]
+           
 
             print(f"[GameManager] 🤖 AI chose: {move_str} (promotion: {promotion})")
 
         except Exception as e:
             print(f"[GameManager] ❌ Analyzer error: {e}")
             # Fallback: Generate random legal move
-            legal_moves = board.generate_all_legal_moves(board.turn)
+            legal_moves = board.generate_all_legal_moves(color)
             if not legal_moves:
                 print(f"[GameManager] ❌ No legal moves available!")
                 raise Exception("No legal moves available")

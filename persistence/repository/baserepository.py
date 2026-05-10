@@ -17,3 +17,4 @@ class BaseRepository:
     def refresh(self, entity):
         self.db.refresh(entity)
         return entity
+        

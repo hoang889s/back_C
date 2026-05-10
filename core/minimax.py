@@ -336,6 +336,7 @@ class Minimax:
                 # cập nhật best_score
                 if eval_score >best_score:
                     best_score = eval_score
+                    best_move_local = move
                 if eval_score > alpha:
                     alpha = eval_score
                 # cắt nhánh
@@ -348,6 +349,7 @@ class Minimax:
             else:
                 if eval_score < best_score: 
                     best_score = eval_score
+                    best_move_local = move
                 if eval_score < beta:      
                     beta = eval_score
                 if beta <= alpha:
