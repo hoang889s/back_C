@@ -11,3 +11,10 @@ WHITE_PIECES = {"P", "R", "N", "B", "Q", "K"}
 # quy định các quân đen sẽ là chữ thường cũng dùng set luôn
 BLACK_PIECES = {"p", "r", "n", "b", "q", "k"}
 
+# độ khó ai
+DIFFICULTY_DEPTH_MAP = {
+    "easy": 2,
+    "medium": 4,
+    "hard": 6,
+    "expert": 8,
+}

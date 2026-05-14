@@ -3,14 +3,15 @@ from persistence.repository.baserepository import BaseRepository
 from core.utils.fen import get_start_fen
 class GameRepository(BaseRepository):
     # tao game ok
-    def create_game(self, room_id, white_id, black_id=None):
+    def create_game(self, room_id, white_id, black_id=None,ai_difficulty=None):
         game = Game(
             room_id=room_id,
             white_player_id=white_id,
             black_player_id=black_id,
             turn=Turn.WHITE,
             status=GameResult.ONGOING,
-            fen=get_start_fen()
+            fen=get_start_fen(),
+            ai_difficulty=ai_difficulty,
         )
         self.add(game)
         self.commit()

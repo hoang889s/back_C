@@ -37,7 +37,13 @@ class ColorChoice(str, enum.Enum):
     WHITE = "white"
     BLACK = "black"
 
+class AIDifficulty(str,enum.Enum):
+    EASY = "easy"      
+    MEDIUM = "medium"  
+    HARD = "hard"      
+    EXPERT = "expert"  
 _by_value = lambda x: [e.value for e in x]
+
 
 # ================= USER =================
 
@@ -213,6 +219,12 @@ class Game(Base):
         back_populates="game",
         cascade="all, delete-orphan",
         order_by="Move.move_number"
+    )
+    ai_difficulty = Column(
+        SAEnum(AIDifficulty, values_callable=_by_value),
+        default=AIDifficulty.MEDIUM,
+        nullable=True,
+        comment="AI difficulty level (easy/medium/hard/expert)"
     )
 
     white_won =  Column(Boolean, default=False, nullable=False)

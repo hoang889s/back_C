@@ -1,5 +1,5 @@
 from core.board import Board
-from core.constants import WHITE, BLACK
+from core.constants import WHITE, BLACK,DIFFICULTY_DEPTH_MAP
 from persistence.repository.gamerepository import GameRepository
 from persistence.repository.roomplayerrepository import RoomPlayerRepository
 from persistence.repository.roomrepository import RoomRepository
@@ -7,6 +7,8 @@ from persistence.repository.userepository import UserRepository
 from persistence.models import Move, Turn, GameResult
 from core.utils.fen import board_to_fen, fen_to_board
 from datetime import datetime
+from services.analyzer import Analyzer 
+from core.minimax import Minimax
 
 class GameManager:
     def __init__(self, db):
@@ -16,22 +18,36 @@ class GameManager:
         self.room_repo = RoomRepository(db)
         self.room_player_repo = RoomPlayerRepository(db)
         self.user_repo = UserRepository(db)
+        self.DIFFICULTY_DEPTH_MAP = {
+            'easy': 2,
+            'medium': 4,
+            'hard': 6,
+            'expert': 8
+        }
 
-    def create_game(self, room_code):
+    def create_game(self, room_code,ai_difficulty=None):
         """Tạo game mới"""
         room = self.room_repo.get_by_code(room_code)
         if not room:
             raise Exception("Room not found")
+
+        
         players = self.room_player_repo.get_players(room.id)
         if len(players) < 1:
             raise Exception("Not enough players")
+
+        
         white_id = players[0].user_id
         black_id = players[1].user_id if len(players) > 1 else None
+
+
         game = self.game_repo.create_game(
             room_id=room.id,
             white_id=white_id,
-            black_id=black_id
+            black_id=black_id,
+            ai_difficulty=ai_difficulty
         )
+
         board = Board()
         self.games[game.id] = {
             "board": board,
@@ -197,7 +213,7 @@ class GameManager:
         
         #  Update game model in database
         print(f"[GameManager] Updating game state in database...")
-        result = self._update_game_state(game_model, board)
+        result = self._update_game_state(game_model, board,is_ai_game = is_ai_game)
         print(f"[GameManager] ✅ Game state updated")
         
         #  Clear cache (game state changed)
@@ -351,7 +367,7 @@ class GameManager:
             return (fr[0], fr[1], to[0], to[1], f"{promotion}")
         return (fr[0],fr[1],to[0],to[1])
 
-    def ai_move(self, game_id, analyzer):
+    def ai_move(self, game_id, analyzer=None,difficulty=None):
         """
         AI makes a move
         
@@ -374,7 +390,11 @@ class GameManager:
         if not is_ai_game:
             print(f"[GameManager] ❌ This is not an AI game!")
             raise Exception("Not an AI game")
-        
+
+        ai_difficulty =difficulty or getattr(game_model, 'ai_difficulty', 'medium')
+        depth = self.DIFFICULTY_DEPTH_MAP.get(ai_difficulty, 4)
+
+        print(f"[GameManager] 🤖 AI Mode - Difficulty: {ai_difficulty} (depth={depth})")
         print(f"[GameManager] 🤖 AI Mode - Current turn: {game_model.turn.value}")
         
         print(f"[GameManager] Game: white={game_model.white_player_id}, black={game_model.black_player_id}")
@@ -390,14 +410,26 @@ class GameManager:
             ai_player_id = game_model.black_player_id
             color = BLACK
         print(f"[GameManager] 🤖 AI ({color}) is thinking...")
+
         try:
+            if analyzer is None:
+                analyzer = Analyzer(depth=depth)
+            else:
+                analyzer.depth = depth
+                analyzer.engine = Minimax(depth)
+            
             best_move = analyzer.get_best_move(game_model.fen, color)
             if not best_move:
                 raise Exception("AI could not find move")
+            
             move_str = self._move_to_notation(best_move)
+
             promotion = None
             if len(best_move) == 5:
-                promotion = best_move[4].upper() if isinstance(best_move[4], str) else best_move[4]
+                piece = best_move[4]
+                if isinstance(piece, str) and piece.upper() in ['Q', 'R', 'B', 'N']:
+                    promotion = piece.upper()
+                    print(f"[GameManager] 🤖 Promotion detected: {promotion}")
            
 
             print(f"[GameManager] 🤖 AI chose: {move_str} (promotion: {promotion})")
@@ -519,7 +551,8 @@ class GameManager:
 
     # Promotion
         if len(move) == 5:
-            promotion_piece = str(move[4]).lower()
-            move_str += promotion_piece
+            promotion_piece = move[4]
+            if isinstance(promotion_piece, str) and promotion_piece.upper() in ['Q', 'R', 'B', 'N']:
+                move_str += promotion_piece.lower()
 
         return move_str

@@ -346,6 +346,7 @@ def handle_join_room(data):
                 room_id=room.id,
                 white_id=room.owner_id if room.owner_color == "white" else None,
                 black_id=room.owner_id if room.owner_color == "black" else None,
+                ai_difficulty=ai_difficulty
             )
             game.is_ai = True
             room.game_id = game.id
@@ -360,6 +361,7 @@ def handle_join_room(data):
                 "game_id": game.id,
                 "room_code": room_code,
                 "mode": "ai",
+                "ai_difficulty": ai_difficulty
             },to=room_code)
 
             socketio.emit("game_state", {
@@ -371,7 +373,8 @@ def handle_join_room(data):
                 "turn": game.turn.value,
                 "status": game.status.value,
                 "fen": game.fen,
-                "board": serialize_board(board)
+                "board": serialize_board(board),
+                "ai_difficulty": ai_difficulty,
             },to=game_room)
             
             
@@ -633,7 +636,8 @@ def handle_move(data):
         if game.is_ai and game.status == GameResult.ONGOING:
             try:
                 print(f"[SOCKET] Triggering AI move for game {game_id}")
-                ai_result = gm.ai_move(game_id, analyzer)
+                ai_difficulty = getattr(game, 'ai_difficulty', 'medium')
+                ai_result = gm.ai_move(game_id, analyzer, difficulty=ai_difficulty)
                 db.commit()
                 updated_game = gm.game_repo.get_game(game_id)
                 updated_board = fen_to_board(updated_game.fen)
@@ -648,6 +652,7 @@ def handle_move(data):
                         GameResult.ONGOING.value
                     ),
                     "winner": ai_result.get("winner"),
+                    "ai_difficulty": ai_difficulty,
                 },to=f"game_{game_id}")
                 print(f"[SOCKET] AI move broadcasted")
             except Exception as ai_error:
@@ -710,14 +715,21 @@ def handle_ai_move(data):
 def handle_create_game(data=None):
     data = data or {}
     user = get_current_user()
+
+
     if not user:
         emit("error", {"message": "Unauthorized"})
         return
 
     db, room_repo, _, gm, _ = get_repos()
+
     try:
         room_code = data.get("room_code")
         mode = data.get("mode","human")
+        ai_difficulty = data.get("ai_difficulty", "medium")
+
+        if ai_difficulty not in ["easy", "medium", "hard", "expert"]:
+            ai_difficulty = "medium"
 
         room = room_repo.get_by_code(room_code)
         if not room:
@@ -739,6 +751,7 @@ def handle_create_game(data=None):
                 room_id = room.id,
                 white_id=white_id,
                 black_id=black_id,
+                ai_difficulty=ai_difficulty
             )
             # Đánh dấu game là AI mode
             game.is_ai = True
@@ -755,6 +768,7 @@ def handle_create_game(data=None):
         emit("game_created",{
             "game_id": game.id,
             "mode":mode,
+            "ai_difficulty": ai_difficulty if mode == "ai" else None
         })
     except Exception as e:
         print(f"[SOCKET ERROR] create_game: {str(e)}")
