@@ -9,7 +9,7 @@ from core.utils.fen import board_to_fen, fen_to_board
 from datetime import datetime
 from services.analyzer import Analyzer 
 from core.minimax import Minimax
-
+from services.pgn_exporter import PGNExporter
 class GameManager:
     def __init__(self, db):
         self.db = db
@@ -24,6 +24,32 @@ class GameManager:
             'hard': 6,
             'expert': 8
         }
+        self.pgn_exporter = PGNExporter()
+    def save_pgn(self, game_id):
+        """Generate and save PGN to the Game record."""
+        game_model = self.game_repo.get_game(game_id)
+        if not game_model:
+            return None
+        
+        # Get player names
+        white_name = "AI" if (game_model.is_ai and not game_model.white_player_id) else (
+            self.user_repo.get_by_id(game_model.white_player_id).username
+            if game_model.white_player_id else "Unknown"
+        )
+
+        black_name = "AI" if (game_model.is_ai and not game_model.black_player_id) else (
+            self.user_repo.get_by_id(game_model.black_player_id).username
+            if game_model.black_player_id else "Unknown"
+        )
+
+        
+
+        pgn_str = self.pgn_exporter.export(game_model, white_name, black_name)
+        game_model.pgn = pgn_str
+        self.db.add(game_model)
+        self.db.flush()
+
+        return pgn_str
 
     def create_game(self, room_code,ai_difficulty=None):
         """Tạo game mới"""

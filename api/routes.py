@@ -7,6 +7,9 @@ from persistence.repository.roomplayerrepository import RoomPlayerRepository
 
 from services.game_manager import GameManager
 from services.analyzer import Analyzer
+from flask import Response
+
+from core.utils.fen import fen_to_board, board_to_fen, get_start_fen
 # =============================
 # HELPER
 # =============================
@@ -21,6 +24,138 @@ class GameRoutes:
         self._register_routes()
     def _register_routes(self):
         bp = self.bp
+        # =============================
+        # DOWNLOAD PGN
+        # =============================
+        @bp.route("/games/<int:game_id>/pgn", methods=["GET"])
+        @login_required
+        def download_pgn(game_id):
+            db = get_db()
+            try:
+                gm = GameManager(db)
+                game = gm.game_repo.get_game(game_id)
+
+                if not game:
+                    return jsonify({"error": "Game not found"}), 404
+                
+                # Generate PGN (use saved PGN or generate fresh)
+                if game.pgn:
+                    pgn_str = game.pgn
+                else:
+                    # Generate on-the-fly for games without saved PGN
+                    from services.pgn_exporter import PGNExporter
+                    exporter = PGNExporter()
+            
+                    white_name = game.white_player.username if game.white_player else "Unknown"
+                    black_name = game.black_player.username if game.black_player else "AI"
+                    pgn_str = exporter.export(game, white_name, black_name)
+                
+                return Response(
+                    pgn_str,
+                    mimetype="application/x-chess-pgn",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="game_{game_id}.pgn"'
+                    }
+                )
+            finally:
+                db.close()
+        # =============================
+        # GET PGN
+        # =============================
+        @bp.route("/games/<int:game_id>/pgn/json", methods=["GET"])
+        @login_required
+        def get_pgn_json(game_id):
+            db = get_db()
+            try:
+                gm = GameManager(db)
+                game = gm.game_repo.get_game(game_id)
+
+                if not game:
+                    return jsonify({"error": "Game not found"}), 404
+                
+                if game.pgn:
+                    pgn_str = game.pgn
+                else:
+                    from services.pgn_exporter import PGNExporter
+                    exporter = PGNExporter()
+                    white_name = game.white_player.username if game.white_player else "Unknown"
+                    black_name = game.black_player.username if game.black_player else "AI"
+                    pgn_str = exporter.export(game, white_name, black_name)
+                
+                return jsonify({
+                    "status": "ok",
+                    "game_id": game_id,
+                    "pgn": pgn_str
+                })
+            finally:
+                db.close()
+        # =============================
+        # REPLAY MATCH
+        # =============================
+        @bp.route("/games/<int:game_id>/replay", methods=["GET"])
+        @login_required
+        def replay_game(game_id):
+            db = get_db()
+            try:
+                gm = GameManager(db)
+                game = gm.game_repo.get_game(game_id)
+
+                if not game:
+                    return jsonify({"error": "Game not found"}), 404
+
+                moves = gm.game_repo.get_moves(game_id)
+                # Rebuild FEN state at each move
+                board = fen_to_board(get_start_fen())
+                replay_data = []
+
+                replay_data.append({
+                    "move_number": 0,
+                    "move": None,
+                    "san": None,
+                    "fen": get_start_fen(),
+                    "comment": "Starting position"
+                })
+
+                
+                for move_model in moves:
+                    parsed = gm._parse_move(move_model.move, move_model.promotion)
+                    board.make_move(parsed)
+                    fen = board_to_fen(board)
+
+                    replay_data.append({
+                        "move_number": move_model.move_number,
+                        "move": move_model.move,
+                        "san": move_model.san or move_model.move,
+                        "fen": fen,
+                        "player_id": move_model.player_id,
+                        "timestamp": move_model.created_at.isoformat() if move_model.created_at else None,
+                    })
+                # Game metadata
+                white_name = game.white_player.username if game.white_player else "Unknown"
+                black_name = game.black_player.username if game.black_player else "AI"
+
+                return jsonify({
+                    "status": "ok",
+                    "game": {
+                        "id": game.id,
+                        "white": {"id": game.white_player_id, "name": white_name},
+                        "black": {"id": game.black_player_id, "name": black_name},
+                        "result": game.status.value,
+                        "end_reason": game.end_reason,
+                        "created_at": game.created_at.isoformat() if game.created_at else None,
+                        "ended_at": game.ended_at.isoformat() if game.ended_at else None,
+                    },
+                    "total_moves": len(moves),
+                    "replay": replay_data,
+                    "pgn": game.pgn,
+                })
+            finally:
+                db.close()
+
+                    
+                
+
+
         # =============================
         # LOGOUT
         # =============================

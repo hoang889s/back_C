@@ -235,6 +235,8 @@ class Game(Base):
     draw_offered_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     ended_at = Column(DATETIME2, nullable=True)
 
+    pgn = Column(Text, nullable=True, comment="Full PGN string of the game")
+
 # ================= MOVE =================
 
 class Move(Base):
@@ -257,10 +259,12 @@ class Move(Base):
     player_id = Column(
         Integer,
         ForeignKey("users.id"),
-        nullable=False
+        nullable=True
     )
 
     created_at = Column(DATETIME2, server_default=func.now())
+
+    san = Column(String(10),nullable = True,comment = "Standard Algebraic Notation e.g. Nf3, O-O")
 
     # relationships
     game = relationship("Game", back_populates="moves")

@@ -18,3 +18,12 @@ DIFFICULTY_DEPTH_MAP = {
     "hard": 6,
     "expert": 8,
 }
+# tên quân cờ
+PIECE_NAMES = {
+    "P": "", "p": "",       
+    "R": "R", "r": "R",
+    "N": "N", "n": "N",
+    "B": "B", "b": "B",
+    "Q": "Q", "q": "Q",
+    "K": "K", "k": "K",
+}

@@ -12,6 +12,7 @@ from services.game_manager import GameManager
 from services.analyzer import Analyzer
 
 from core.utils.fen import fen_to_board, board_to_fen
+from core.utils.san import move_to_san
 from api.auth import _jwt_service
 from datetime import datetime
 
@@ -571,6 +572,16 @@ def handle_move(data):
         print(f"  - FEN: {game_before.fen}")
         print(f"  - Turn: {game_before.turn.value}")
 
+
+         # Compute SAN before making the move
+        pre_move_board = fen_to_board(game_before.fen)
+
+        parsed_move = gm._parse_move(move_str, promotion=promotion)
+
+        current_color = "white" if game_before.turn == Turn.WHITE else "black"
+            
+        san_notation = move_to_san(pre_move_board, parsed_move, current_color)
+
         # Make the move
         try:
             result = gm.make_move(
@@ -584,40 +595,24 @@ def handle_move(data):
             emit("error", {"message": str(e)})
             return
         
-        
-        print(f"[DEBUG] make_move result: {result}")
-        
-        # Log game state SAU make_move nhưng TRƯỚC commit
-        game_after_make = gm.game_repo.get_game(game_id)
-        print(f"[DEBUG] AFTER make_move (before commit):")
-        print(f"  - FEN: {game_after_make.fen}")
-        print(f"  - Turn: {game_after_make.turn.value}")
-        
-        
-        db.commit()
-        
-        # Log game state SAU commit
-        game_after_commit = gm.game_repo.get_game(game_id)
-        print(f"[DEBUG] AFTER commit:")
-        print(f"  - FEN: {game_after_commit.fen}")
-        print(f"  - Turn: {game_after_commit.turn.value}")
-        
+
         # Get move_number
         moves = db.query(Move).filter(Move.game_id == game_id).all()
         move_number = len(moves) + 1
-        
-        # Record move in database with move_number
-        gm.game_repo.add_move(game_id, move_str, user.id, move_number,promotion)
+
         db.commit()
+        gm.game_repo.add_move(game_id, move_str, user.id, move_number, promotion, san=san_notation)
+        db.commit()
+
+        try:
+            gm.save_pgn(game_id)
+            db.commit()
+        except Exception as pgn_error:
+            print(f"[SOCKET WARNING] PGN save failed: {pgn_error}")
         
-        # Get updated game state
+        
         game = gm.game_repo.get_game(game_id)
         board = fen_to_board(game.fen)
-        
-        print(f"[SOCKET] Broadcasting:")
-        print(f"  - FEN: {game.fen}")
-        print(f"  - Turn: {game.turn.value}")
-        print(f"  - Board: {serialize_board(board)}")
         
         # Broadcast move to all players in game
         socketio.emit("move",{
@@ -637,8 +632,47 @@ def handle_move(data):
             try:
                 print(f"[SOCKET] Triggering AI move for game {game_id}")
                 ai_difficulty = getattr(game, 'ai_difficulty', 'medium')
+
+                # Get game state BEFORE AI move
+                game_before_ai = gm.game_repo.get_game(game_id)
+                pre_ai_board = fen_to_board(game_before_ai.fen)
+                current_color_ai = "white" if game_before_ai.turn == Turn.WHITE else "black"
+
+                
                 ai_result = gm.ai_move(game_id, analyzer, difficulty=ai_difficulty)
                 db.commit()
+
+
+                # Extract move_str from ai_result
+                ai_move_str = ai_result.get("move")
+                ai_promotion = ai_result.get("promotion")
+
+                # Compute SAN for AI move
+                ai_parsed_move = gm._parse_move(ai_move_str, promotion=ai_promotion)
+                ai_san_notation = move_to_san(pre_ai_board, ai_parsed_move, current_color_ai)
+
+                # Get move_number for AI move
+                moves_before_ai = db.query(Move).filter(Move.game_id == game_id).all()
+                ai_move_number = len(moves_before_ai) + 1
+
+                # Record AI move in database with SAN
+                gm.game_repo.add_move(
+                    game_id,
+                    ai_move_str,
+                    None,  # AI doesn't have a player_id
+                    ai_move_number,
+                    ai_promotion,
+                    san=ai_san_notation
+                )
+                db.commit()
+                try:
+                    gm.save_pgn(game_id)
+                    db.commit()
+                except Exception as pgn_error:
+                    print(f"[SOCKET WARNING] PGN save failed after AI move: {pgn_error}")
+
+
+
                 updated_game = gm.game_repo.get_game(game_id)
                 updated_board = fen_to_board(updated_game.fen)
                 socketio.emit("ai_move", {
@@ -681,9 +715,37 @@ def handle_ai_move(data):
         game_id = data.get("game_id")
         print(f"[SOCKET] AI move requested for game {game_id}")
 
+        # Get game state BEFORE AI move
+        game_before_ai = gm.game_repo.get_game(game_id)
+        pre_ai_board = fen_to_board(game_before_ai.fen)
+        current_color_ai = "white" if game_before_ai.turn == Turn.WHITE else "black"
+
         # Generate AI move
         result = gm.ai_move(game_id, analyzer)
         db.commit()  
+
+        # Extract move_str and promotion from result
+        ai_move_str = result.get("move")
+        ai_promotion = result.get("promotion")
+
+        # Compute SAN for AI move
+        ai_parsed_move = gm._parse_move(ai_move_str, promotion=ai_promotion)
+        ai_san_notation = move_to_san(pre_ai_board, ai_parsed_move, current_color_ai)
+
+        # Get move_number for AI move
+        moves_before_ai = db.query(Move).filter(Move.game_id == game_id).all()
+        ai_move_number = len(moves_before_ai) + 1
+
+        # Record AI move in database with SAN
+        gm.game_repo.add_move(
+            game_id,
+            ai_move_str,
+            None,  # AI doesn't have a player_id
+            ai_move_number,
+            ai_promotion,
+            san=ai_san_notation
+        )
+        db.commit()
         
         # Get updated game state
         game = gm.game_repo.get_game(game_id)
@@ -799,23 +861,29 @@ def handle_resign(data):
 
         print(f"[SOCKET] {user.username} (ID: {user.id}) resigned from game {game_id}")
 
-        # Process draw acceptance
-        result = gm.accept_draw(game_id, user.id)
+        # Process resignation
+        result = gm.resign_game(game_id, user.id)
+        db.commit()
+
+        # SAVE PGN AFTER RESIGNATION
+        gm.save_pgn(game_id)
         db.commit()
 
         # Get updated game
         game = gm.game_repo.get_game(game_id)
         board = fen_to_board(game.fen)
 
-        #  Broadcast draw acceptance to all players
+        # Broadcast resignation to all players
         socketio.emit("game_ended", {
             "game_id": game_id,
             "status": game.status.value,
-            "reason": "draw_agreed",
+            "reason": "resignation",
+            "winner": result.get("winner"),
+            "loser": result.get("loser"),
             "fen": game.fen,
             "board": serialize_board(board),
             "turn": game.turn.value,
-        },to=f"game_{game_id}")
+        }, to=f"game_{game_id}")
 
         print(f"[SOCKET] Draw accepted for game {game_id}")
     except Exception as e:
@@ -833,6 +901,7 @@ def handle_offer_draw(data):
     if not user:
         emit("error", {"message": "Unauthorized"})
         return
+    
     db, _, _, gm, _ = get_repos()
     try:
         game_id = data.get("game_id")
@@ -842,27 +911,25 @@ def handle_offer_draw(data):
 
         print(f"[SOCKET] {user.username} (ID: {user.id}) offered draw for game {game_id}")
 
-        # Process draw acceptance
-        result = gm.accept_draw(game_id, user.id)
+        # Update game model with draw offer
+        game = gm.game_repo.get_game(game_id)
+        game.draw_offered_by = user.id
+        db.add(game)
         db.commit()
 
-        # Get updated game
-        game = gm.game_repo.get_game(game_id)
-        board = fen_to_board(game.fen)
+        # DO NOT save PGN here - game is still ongoing
+        # Only save when draw is ACCEPTED (see handle_accept_draw)
 
-        #  Broadcast draw acceptance to all players
-        socketio.emit("game_ended", {
+        # Broadcast draw offer to opponent
+        socketio.emit("draw_offered", {
             "game_id": game_id,
-            "status": game.status.value,
-            "reason": "draw_agreed",
-            "fen": game.fen,
-            "board": serialize_board(board),
-            "turn": game.turn.value,
-        },to=f"game_{game_id}")
+            "offered_by": user.id,
+            "offered_by_name": user.username,
+        }, to=f"game_{game_id}", include_self=False)
 
-        print(f"[SOCKET] Draw accepted for game {game_id}")
+        print(f"[SOCKET] Draw offered for game {game_id}")
     except Exception as e:
-        print(f"[SOCKET ERROR] accept_draw: {str(e)}")
+        print(f"[SOCKET ERROR] offer_draw: {str(e)}")
         emit("error", {"message": str(e)})
     finally:
         db.close()
@@ -887,3 +954,110 @@ def handle_reject_draw(data):
         "rejected_by": user.id,
         "rejected_by_name": user.username,
     },to=f"game_{game_id}", include_self=False)
+# =============================
+# ACCEPT DRAW
+# =============================
+@socketio.on("accept_draw")
+def handle_accept_draw(data):
+    user = get_current_user()
+    if not user:
+        emit("error", {"message": "Unauthorized"})
+        return
+    db, _, _, gm, _ = get_repos()
+    try:
+        game_id = data.get("game_id")
+        if not game_id:
+            emit("error", {"message": "Game ID required"})
+            return
+        
+        print(f"[SOCKET] {user.username} (ID: {user.id}) accepted draw for game {game_id}")
+
+        # Process draw acceptance
+        result = gm.accept_draw(game_id, user.id)
+        db.commit()
+
+        #  SAVE PGN AFTER DRAW IS ACCEPTED
+        try:
+            gm.save_pgn(game_id)
+            db.commit()
+        except Exception as pgn_error:
+            print(f"[SOCKET WARNING] PGN save failed: {pgn_error}")
+        
+        # Get updated game
+        game = gm.game_repo.get_game(game_id)
+        board = fen_to_board(game.fen)
+
+        # Broadcast draw acceptance to all players
+        socketio.emit("game_ended", {
+            "game_id": game_id,
+            "status": game.status.value,
+            "reason": "draw_agreed",
+            "fen": game.fen,
+            "board": serialize_board(board),
+            "turn": game.turn.value,
+        }, to=f"game_{game_id}")
+
+        print(f"[SOCKET] Draw accepted for game {game_id}")
+    except Exception as e:
+        print(f"[SOCKET ERROR] accept_draw: {str(e)}")
+        emit("error", {"message": str(e)})
+    finally:
+        db.close()
+# =============================
+# REPLAY GAME
+# =============================
+@socketio.on("replay_game")
+def handle_replay_game(data):
+    """Load a finished game for replay."""
+    user = get_current_user()
+    if not user:
+        emit("error", {"message": "Unauthorized"})
+        return
+    
+    db, _, _, gm, _ = get_repos()
+    try:
+        game_id = data.get("game_id")
+        game = gm.game_repo.get_game(game_id)
+        
+        if not game:
+            emit("replay_error", {"message": "Game not found"})
+            return
+        
+        moves = gm.game_repo.get_moves(game_id)
+        
+        # Build replay frames
+        from core.utils.fen import get_start_fen
+        board = fen_to_board(get_start_fen())
+        
+        frames = [{
+            "move_number": 0,
+            "fen": get_start_fen(),
+            "board": serialize_board(board),
+            "san": None,
+        }]
+        
+        for move_model in moves:
+            parsed = gm._parse_move(move_model.move, move_model.promotion)
+            board.make_move(parsed)
+            
+            frames.append({
+                "move_number": move_model.move_number,
+                "move": move_model.move,
+                "san": move_model.san or move_model.move,
+                "fen": board_to_fen(board),
+                "board": serialize_board(board),
+                "player_id": move_model.player_id,
+            })
+        
+        emit("replay_data", {
+            "game_id": game_id,
+            "total_moves": len(moves),
+            "frames": frames,
+            "pgn": game.pgn,
+        })
+        
+    except Exception as e:
+        print(f"[SOCKET ERROR] replay_game: {str(e)}")
+        emit("replay_error", {"message": str(e)})
+    finally:
+        db.close()

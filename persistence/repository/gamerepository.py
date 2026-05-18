@@ -24,7 +24,7 @@ class GameRepository(BaseRepository):
     def get_by_room_id(self, room_id):
         return self.db.query(Game).filter(Game.room_id == room_id).first()
     # add move ok
-    def add_move(self, game_id, move_str, player_id, move_number,promotion=None):
+    def add_move(self, game_id, move_str, player_id, move_number,promotion=None, san=None):
         game = self.get_game(game_id)
         if not game:
             return None
@@ -34,7 +34,8 @@ class GameRepository(BaseRepository):
             move=move_str,
             player_id=player_id,
             move_number=move_number,
-            promotion=promotion
+            promotion=promotion,
+            san = san,
         )
         self.db.add(mv)
         self.db.flush()
